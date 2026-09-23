@@ -3,11 +3,13 @@ import { NextResponse } from "next/server";
 import { CONTACT, PROJECTS, SKILL_GROUPS, TEAM, localizeMember } from "../../data/portfolio";
 
 // เรียก AI ฝั่งเซิร์ฟเวอร์เท่านั้น — API key อยู่ใน .env.local และไม่ถูกส่งไปที่เบราว์เซอร์
-const API_BASE = process.env.AI_API_BASE ?? "https://api.maxplus-ai.cc/v1";
-const API_KEY = process.env.AI_API_KEY;
-const MODEL = process.env.AI_MODEL ?? "gemini-3.8-flash";
+// ค่าที่ว่าง / มีแต่ช่องว่าง ให้ถือว่าไม่ได้ตั้ง แล้วใช้ค่าเริ่มต้นแทน (กันกรณีกรอกค่าใน Vercel ไม่ครบ)
+const env = (name: string) => process.env[name]?.trim().replace(/^["']|["']$/g, "") || undefined;
+const API_BASE = (env("AI_API_BASE") ?? "https://api.maxplus-ai.cc/v1").replace(/\/+$/, "");
+const API_KEY = env("AI_API_KEY");
+const MODEL = env("AI_MODEL") ?? "gemini-3.8-flash";
 // โมเดลสำรอง — ใช้เมื่อโมเดลหลักตอบ error (ผู้ให้บริการบางครั้งตอบ "model not available" เป็นพัก ๆ)
-const FALLBACK_MODEL = process.env.AI_FALLBACK_MODEL ?? "gemini-3-flash";
+const FALLBACK_MODEL = env("AI_FALLBACK_MODEL") ?? "gemini-3-flash";
 
 const MAX_HISTORY = 10;
 const MAX_CHARS = 500;
@@ -15,8 +17,8 @@ const MAX_BODY_BYTES = 16 * 1024;
 
 // ---------- กันการใช้งานเกิน (ลดค่าใช้จ่ายถ้ามีคนยิง API) ----------
 const PER_IP_PER_MIN = 15;
-const GLOBAL_PER_MIN = Number(process.env.AI_GLOBAL_PER_MIN ?? 60);   // ทุกคนรวมกัน
-const GLOBAL_PER_DAY = Number(process.env.AI_DAILY_LIMIT ?? 1000);    // ทุกคนรวมกัน (นับทุกครั้งที่เรียก AI จริง)
+const GLOBAL_PER_MIN = Number(env("AI_GLOBAL_PER_MIN") ?? 60);   // ทุกคนรวมกัน
+const GLOBAL_PER_DAY = Number(env("AI_DAILY_LIMIT") ?? 1000);    // ทุกคนรวมกัน (นับทุกครั้งที่เรียก AI จริง)
 
 const ipHits = new Map<string, number[]>();
 const globalHits: number[] = [];
@@ -69,7 +71,7 @@ function sameOrigin(req: Request) {
 // ---------- ลายเซ็นคำตอบของ AI ----------
 // ประวัติแชตถูกส่งกลับมาจากเบราว์เซอร์ จึงเซ็นทุกคำตอบของ AI ไว้ และทิ้งข้อความ "ของ AI" ที่ไม่มีลายเซ็นถูกต้อง
 // (กันคนแต่งประวัติปลอมเพื่อหลอกให้ AI ทำตามคำสั่งอื่น)
-const SIGNING_KEY = process.env.CHAT_SIGNING_SECRET || createHash("sha256").update(`iasrom-chat-sign:${API_KEY ?? ""}`).digest("hex");
+const SIGNING_KEY = env("CHAT_SIGNING_SECRET") || createHash("sha256").update(`iasrom-chat-sign:${API_KEY ?? ""}`).digest("hex");
 const sign = (text: string) => createHmac("sha256", SIGNING_KEY).update(text).digest("base64url");
 function validSig(text: string, sig: unknown) {
   if (typeof sig !== "string") return false;
