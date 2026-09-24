@@ -575,7 +575,9 @@
   transition: background .2s ease, color .2s ease, transform .2s ease;
 }
 
-.tm-links a:hover { background: var(--pf-accent-2); border-color: var(--pf-accent-2); color: #fff; transform: translateY(-2px); }
+.tm-links a:not(.tm-line):hover { background: var(--pf-accent-2); border-color: var(--pf-accent-2); color: #fff; transform: translateY(-2px); }
+.tm-links a.tm-line { border-color: #06c755; background: #06c755; color: #fff; }
+.tm-links a.tm-line:hover { background: #05b04b; border-color: #05b04b; }
 .tm-links svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 .site-footer {
@@ -680,6 +682,9 @@
 .ct-button svg:last-child { transition: transform .25s ease; }
 .ct-button:hover { transform: translateY(-2px); filter: saturate(1.15); box-shadow: 0 12px 26px rgba(43, 185, 140, .34); }
 .ct-button:hover svg:last-child { transform: translateX(4px); }
+.ct-button + .ct-button { margin-top: -8px; }
+.ct-button.ct-line { background: #06c755; color: #fff; box-shadow: 0 8px 20px rgba(6, 199, 85, .25); }
+.ct-button.ct-line:hover { box-shadow: 0 12px 26px rgba(6, 199, 85, .34); }
 
 .ct-channels {
   max-width: 1100px;

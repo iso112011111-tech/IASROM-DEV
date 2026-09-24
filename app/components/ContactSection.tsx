@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { CONTACT, TEAM, localizeMember } from "../data/portfolio";
+import { CONTACT, LINE_OA_URL, TEAM, localizeMember } from "../data/portfolio";
 import { useLang } from "../i18n";
 
 function Icon({ d }: { d: string }) { return <svg viewBox="0 0 24 24" aria-hidden="true"><path d={d} /></svg>; }
@@ -55,6 +55,9 @@ export default function ContactSection() {
               <Icon d={ICON.facebook} />{t(`ทักแชทหา${m.nickname}ทาง Facebook`, `Message ${m.nickname} on Facebook`)}<Icon d={ICON.arrow} />
             </a>
           : null}
+        <a className="ct-button ct-line" href={LINE_OA_URL} target="_blank" rel="noopener noreferrer">
+          <Icon d={ICON.chat} />{t("ทักแชทผ่าน LINE-OA", "Chat with us on LINE-OA")}<Icon d={ICON.arrow} />
+        </a>
       </article>)}
     </div>
 

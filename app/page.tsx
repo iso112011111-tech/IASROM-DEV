@@ -10,6 +10,7 @@ import TeamSection from "./components/TeamSection";
 import ContactSection from "./components/ContactSection";
 import ChatAssistant from "./components/ChatAssistant";
 import ScrollReveal from "./components/ScrollReveal";
+import { LINE_OA_URL } from "./data/portfolio";
 import LogoIntro from "./components/LogoIntro";
 import { LangProvider, useLang } from "./i18n";
 import { currentTheme, saveManualTheme, type Theme } from "./theme";
@@ -22,6 +23,10 @@ const navigation = [
   { id: "work", th: "ผลงานเว็บไซต์", en: "Our Work", href: "#projects" },
   { id: "contact", th: "ติดต่อเรา", en: "Contact", href: "#contact" },
 ];
+
+function LineIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="line-icon"><path d="M12 3C6.5 3 2 6.6 2 11c0 3.9 3.5 7.2 8.3 7.9.3.1.8.2.9.5.1.3.1.7 0 1l-.1.9c0 .3-.2 1 .9.5 1.1-.5 5.9-3.5 8-6C21.4 14.2 22 12.7 22 11c0-4.4-4.5-8-10-8z" fill="currentColor" /><path d="M6.5 9v4h2M10 9v4M12.2 13V9l2.6 4V9M19 9h-2.2v4H19M16.8 11H19" fill="none" stroke="#fff" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
 
 function Brand() {
   return <a className="brand" href="#" aria-label="IASROM-DEV home"><Image className="brand-image" src="/logoASROM-DEV.png" alt="IASROM-DEV" width={76} height={76} priority /></a>;
@@ -124,6 +129,7 @@ function HomeContent() {
         <Brand />
         <nav className={open ? "menu menu-open" : "menu"} aria-label={t("เมนูหลัก", "Main menu")}>
           {navigation.map((item) => <a href={item.href} key={item.id} className={item.id === active ? "is-active" : undefined} aria-current={item.id === active ? "page" : undefined} onClick={() => { setActive(item.id); setOpen(false); }}>{item[lang]}</a>)}
+          <a className="nav-line" href={LINE_OA_URL} target="_blank" rel="noopener noreferrer" onClick={() => setOpen(false)} aria-label={t("แอดไลน์ LINE-OA ของเรา", "Add our LINE-OA")}><LineIcon />LINE-OA</a>
         </nav>
         <div className="nav-actions">
           <div className="lang-switch" role="group" aria-label={t("เลือกภาษา", "Language")}>
