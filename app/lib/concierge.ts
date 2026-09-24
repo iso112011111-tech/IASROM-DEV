@@ -1,5 +1,5 @@
 // IASROM AI Concierge — AI คุยแทนทีมระหว่างรอ: เก็บความต้องการ แนะนำ ประเมินราคาคร่าว ๆ และส่งต่อให้ทีม
-import { baht, estimate, pricingForPrompt, type Estimate } from "../data/pricing";
+import { baht, estimate, pricingForPrompt, type Estimate, type PriceItem } from "../data/pricing";
 import type { ChatMessage } from "./ai";
 import {
   C, bubble, flex, header, listRow, msgButton, postbackButton, push, quickReply, text, uriButton, type LineMessage,
@@ -112,7 +112,7 @@ export function customerListCard(list: Customer[], globalPaused: boolean): LineM
 
 // ---------------------------------------------------------------- prompt
 
-export function conciergeAddendum(c: Customer) {
+export function conciergeAddendum(c: Customer, table: PriceItem[]) {
   const status = c.mode === "human" ? "ทีมรับเรื่องแล้ว" : c.ticketId ? "แจ้งทีมแล้ว กำลังรอทีมตอบ — คุยช่วยระหว่างรอได้" : "ยังไม่ได้แจ้งทีม";
   return `
 
@@ -128,7 +128,7 @@ export function conciergeAddendum(c: Customer) {
 - ใช้แท็กลิงก์ / [[project:<id>]] ได้ตามกฎเดิม
 
 ตารางราคาประมาณการ (id):
-${pricingForPrompt()}
+${pricingForPrompt(table)}
 
 สถานะลูกค้าตอนนี้: ${status}${c.brief ? `\nความต้องการที่รู้แล้ว: ${c.brief}` : ""}${c.estimateSpec ? `\nประเมินไปแล้ว: ${c.estimateSpec}` : ""}`;
 }
@@ -190,8 +190,8 @@ export function waitingCard(): LineMessage {
   ]));
 }
 
-export function adminTicketCard(t: Ticket): LineMessage {
-  const est = t.estimateSpec ? estimate(t.estimateSpec) : null;
+export function adminTicketCard(t: Ticket, table: PriceItem[]): LineMessage {
+  const est = t.estimateSpec ? estimate(t.estimateSpec, table) : null;
   return flex(`🔔 ลูกค้าใหม่: ${t.name}`, bubble({
     header: header("🔔 ลูกค้ารอคุยกับทีม", `${t.id} · ${new Date(t.createdAt).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" })}`),
     body: { type: "box", layout: "vertical", spacing: "md", paddingAll: "20px", contents: [
@@ -227,7 +227,7 @@ export function acceptedAdminCard(t: Ticket): LineMessage {
 // ---------------------------------------------------------------- ส่งต่อทีม
 
 /** สร้างเรื่องใหม่ (ถ้ายังไม่มีเรื่องที่เปิดอยู่) แล้วแจ้งทีมทุกคน */
-export async function handoff(c: Customer, reason: string): Promise<{ ticket: Ticket; notified: number; isNew: boolean }> {
+export async function handoff(c: Customer, reason: string, table: PriceItem[]): Promise<{ ticket: Ticket; notified: number; isNew: boolean }> {
   if (c.ticketId) {
     const existing = await getTicket(c.ticketId);
     if (existing && existing.status !== "closed") return { ticket: existing, notified: 0, isNew: false };
@@ -240,6 +240,6 @@ export async function handoff(c: Customer, reason: string): Promise<{ ticket: Ti
   await saveTicket(ticket);
   c.ticketId = ticket.id;
   const admins = await listAdmins();
-  await Promise.all(admins.map((a) => push(a.userId, [adminTicketCard(ticket)])));
+  await Promise.all(admins.map((a) => push(a.userId, [adminTicketCard(ticket, table)])));
   return { ticket, notified: admins.length, isNew: true };
 }

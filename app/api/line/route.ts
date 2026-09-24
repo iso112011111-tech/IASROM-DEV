@@ -12,6 +12,7 @@ import {
   repairMessage, reply, showLoading, startProjectMessage, validSignature, welcomeMessage, type LineMessage,
 } from "../../lib/line";
 import { estimate } from "../../data/pricing";
+import { getPricing } from "../../lib/pricingStore";
 import { PROJECTS } from "../../data/portfolio";
 
 export const preferredRegion = ["sin1"];
@@ -85,7 +86,7 @@ async function adminCommand(userId: string, text: string): Promise<LineMessage[]
 // ---------------------------------------------------------------- ลูกค้า
 
 async function startHandoff(event: LineEvent, c: Customer, reason: string, extra: LineMessage[] = []) {
-  const { notified, isNew } = await handoff(c, reason);
+  const { notified, isNew } = await handoff(c, reason, await getPricing());
   await saveCustomer(c);
   const note = !isNew
     ? say("แจ้งทีมไว้แล้วครับ 🙏 ทีมจะมาตอบในแชตนี้เร็ว ๆ นี้ ระหว่างรอถามผมต่อได้เลย")
@@ -107,7 +108,8 @@ async function handleCustomerText(event: LineEvent, c: Customer, text: string) {
   await showLoading(c.userId, 25);
   const lang = isEnglish(text) ? "en" : "th";
   const history: ChatMessage[] = [...c.history, { role: "user", content: text.slice(0, 500) }];
-  const answer = await askOnce(history, lang, conciergeAddendum(c));
+  const table = await getPricing();
+  const answer = await askOnce(history, lang, conciergeAddendum(c, table));
 
   if (!answer || answer === "budget") {
     return reply(event.replyToken!, [say(answer === "budget"
@@ -117,7 +119,7 @@ async function handleCustomerText(event: LineEvent, c: Customer, text: string) {
 
   const tags = parseConciergeTags(answer);
   if (tags.brief) c.brief = tags.brief;
-  const est = tags.estimateSpec ? estimate(tags.estimateSpec) : null;
+  const est = tags.estimateSpec ? estimate(tags.estimateSpec, table) : null;
   if (est && tags.estimateSpec) c.estimateSpec = tags.estimateSpec;
   c.history = [...history, { role: "assistant", content: answer }];
 

@@ -52,13 +52,13 @@ export type Estimate = {
 };
 
 /** คำนวณจากแท็ก เช่น "web_business,addon_booking,cctv_extra x2" — ข้าม id ที่ไม่มีในตาราง */
-export function estimate(spec: string): Estimate | null {
+export function estimate(spec: string, table: PriceItem[] = PRICING): Estimate | null {
   const lines: Estimate["lines"] = [];
   const recurring: Estimate["recurring"] = [];
   for (const part of spec.split(",")) {
     const m = part.trim().match(/^([a-z0-9_]+)\s*(?:x\s*(\d+))?$/i);
     if (!m) continue;
-    const item = PRICING.find((p) => p.id === m[1]);
+    const item = table.find((p) => p.id === m[1]);
     if (!item || lines.some((l) => l.item.id === item.id) || recurring.some((r) => r.item.id === item.id)) continue;
     const qty = item.perUnit ? Math.min(Math.max(Number(m[2] ?? 1), 1), 100) : 1;
     if (item.recurring) recurring.push({ item, min: item.min, max: item.max });
@@ -73,6 +73,6 @@ export function estimate(spec: string): Estimate | null {
 }
 
 /** ตารางสำหรับใส่ใน prompt ของ AI */
-export const pricingForPrompt = () => PRICING.map((p) =>
+export const pricingForPrompt = (table: PriceItem[] = PRICING) => table.map((p) =>
   `- ${p.id}: ${p.name}${p.unit ? ` (${p.unit} ใส่จำนวนได้ เช่น ${p.id} x3)` : ""}${p.recurring ? ` [รายปี/เดือน]` : ""}${p.note ? ` — ${p.note}` : ""}`,
 ).join("\n");
