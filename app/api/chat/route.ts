@@ -11,6 +11,10 @@ const MODEL = env("AI_MODEL") ?? "gemini-3.8-flash";
 // โมเดลสำรอง — ใช้เมื่อโมเดลหลักตอบ error (ผู้ให้บริการบางครั้งตอบ "model not available" เป็นพัก ๆ)
 const FALLBACK_MODEL = env("AI_FALLBACK_MODEL") ?? "gemini-3-flash";
 
+// รันใกล้ผู้ใช้ไทย (สิงคโปร์) แทนค่าเริ่มต้นที่สหรัฐฯ — ลดเวลาตอบ
+export const preferredRegion = ["sin1"];
+export const maxDuration = 60;
+
 const MAX_HISTORY = 10;
 const MAX_CHARS = 500;
 const MAX_BODY_BYTES = 16 * 1024;
@@ -82,7 +86,7 @@ function validSig(text: string, sig: unknown) {
 
 function siteKnowledge() {
   const skills = SKILL_GROUPS.map((g) => `- ${g.title}: ${g.skills.map((s) => `${s.name} ${s.level}%`).join(", ")}`).join("\n");
-  const projects = PROJECTS.map((p) => `- ${p.title} (${p.category}, ${p.year}): ${p.details} | เทคโนโลยี: ${p.stack.join(", ")} | ฟีเจอร์: ${p.highlights.join(", ")}`).join("\n");
+  const projects = PROJECTS.map((p) => `- [id: ${p.id}] ${p.title} (${p.category}, ${p.year}): ${p.details} | เทคโนโลยี: ${p.stack.join(", ")} | ฟีเจอร์: ${p.highlights.join(", ")}`).join("\n");
   const team = TEAM.map((m) => `- ${m.name} (${m.nickname}) — ${m.role}; ติดต่อเรื่อง: ${(m.handles ?? []).join(", ")}; Facebook: ${m.facebook ?? "-"}`).join("\n");
   const contact = [
     CONTACT.phone && `โทร: ${CONTACT.phone}`,
@@ -121,6 +125,7 @@ const SYSTEM_PROMPT = `คุณคือ "IASROM AI" ผู้ช่วยแ�
 8. เขียนเป็นข้อความธรรมดา ใช้ "• " สำหรับรายการ ไม่ต้องใช้ markdown หัวข้อหรือตาราง
 9. ถ้าเหมาะ ให้ต่อท้ายคำตอบด้วยแท็กลิงก์ (บรรทัดสุดท้าย, ได้หลายอัน, ใช้เฉพาะที่เกี่ยวข้อง):
    [[projects]] ส่วนผลงาน, [[skills]] ส่วนทักษะ, [[team]] ส่วนทีม, [[contact]] ส่วนติดต่อ, [[fb:โซ่]] หรือ [[fb:อาม]] Facebook ของคนนั้น
+10. เมื่อพูดถึงผลงานชิ้นใดชิ้นหนึ่งโดยตรง ให้ใส่แท็กการ์ดผลงาน [[project:<id>]] ไว้บรรทัดสุดท้ายด้วย (ใช้ id จากรายการผลงาน, สูงสุด 3 ชิ้น) เช่น [[project:pos]]
 
 ${siteKnowledge()}`;
 
@@ -164,16 +169,20 @@ export async function POST(req: Request) {
   if (!history.length || history[history.length - 1].role !== "user") return fail("ไม่มีคำถาม", 400);
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 40_000);
+  const timer = setTimeout(() => controller.abort(), 55_000);
   const system = lang === "en" ? SYSTEM_PROMPT + EN_ADDENDUM : SYSTEM_PROMPT;
+
+  // ลองโมเดลหลักก่อน ถ้า error (ก่อนเริ่มส่งคำตอบ) ค่อยลองโมเดลสำรอง
+  let upstream: Response | null = null;
   try {
     for (const model of [...new Set([MODEL, FALLBACK_MODEL])]) {
-      if (!takeGlobal()) return fail("ขณะนี้มีผู้ใช้งานจำนวนมาก กรุณาลองใหม่ภายหลัง", 429);
+      if (!takeGlobal()) { clearTimeout(timer); return fail("ขณะนี้มีผู้ใช้งานจำนวนมาก กรุณาลองใหม่ภายหลัง", 429); }
       const res = await fetch(`${API_BASE}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
         body: JSON.stringify({
           model,
+          stream: true,
           messages: [{ role: "system", content: system }, ...history],
           // โมเดลนี้ใช้ token ส่วนหนึ่งไปกับการคิดก่อนตอบ จึงต้องเผื่อไว้มาก
           max_tokens: 2048,
@@ -181,20 +190,58 @@ export async function POST(req: Request) {
         }),
         signal: controller.signal,
       });
-      if (!res.ok) {
-        console.error(`AI API error (${model})`, res.status, (await res.text()).slice(0, 300));
-        continue;
-      }
-      const data = await res.json();
-      const reply: string = data?.choices?.[0]?.message?.content?.trim() ?? "";
-      if (reply) return NextResponse.json({ reply, sig: sign(reply) });
-      console.error(`AI returned empty reply (${model})`);
+      if (res.ok && res.body) { upstream = res; break; }
+      console.error(`AI API error (${model})`, res.status, (await res.text()).slice(0, 300));
     }
-    return fail("AI ไม่ตอบสนอง", 502);
   } catch (err) {
+    clearTimeout(timer);
     console.error("AI request failed", err);
     return fail("เชื่อมต่อ AI ไม่สำเร็จ", 504);
-  } finally {
-    clearTimeout(timer);
   }
+  if (!upstream?.body) { clearTimeout(timer); return fail("AI ไม่ตอบสนอง", 502); }
+
+  // ส่งต่อคำตอบทีละส่วนเป็น NDJSON: {"d":"ข้อความ"} ... แล้วปิดท้ายด้วย {"done":true,"sig":"..."}
+  const reader = upstream.body.getReader();
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(out) {
+      const send = (obj: unknown) => out.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+      let buffer = "";
+      let full = "";
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+          for (const line of lines) {
+            const data = line.trim();
+            if (!data.startsWith("data:")) continue;
+            const payload = data.slice(5).trim();
+            if (payload === "[DONE]") continue;
+            try {
+              const delta: string = JSON.parse(payload)?.choices?.[0]?.delta?.content ?? "";
+              if (delta) { full += delta; send({ d: delta }); }
+            } catch { /* บรรทัดที่ไม่ใช่ JSON — ข้าม */ }
+          }
+        }
+        const reply = full.trim();
+        if (reply) send({ done: true, sig: sign(reply) });
+        else send({ error: "AI ไม่ได้ส่งคำตอบ" });
+      } catch (err) {
+        console.error("AI stream failed", err);
+        send({ error: "เชื่อมต่อ AI ไม่สำเร็จ" });
+      } finally {
+        clearTimeout(timer);
+        out.close();
+      }
+    },
+    cancel() { controller.abort(); clearTimeout(timer); },
+  });
+
+  return new Response(stream, {
+    headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store", "X-Accel-Buffering": "no" },
+  });
 }

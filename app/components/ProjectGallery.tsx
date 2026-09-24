@@ -57,8 +57,11 @@ export default function ProjectGallery() {
 
   useEffect(() => {
     const onFilter = (e: Event) => setFilter((e as CustomEvent<LangId>).detail);
+    // เปิดหน้าต่างรายละเอียดจากที่อื่น เช่น การ์ดผลงานในแชต AI
+    const onOpen = (e: Event) => { const id = (e as CustomEvent<string>).detail; if (RAW_PROJECTS.some((p) => p.id === id)) setOpenId(id); };
     window.addEventListener("pf-filter", onFilter);
-    return () => window.removeEventListener("pf-filter", onFilter);
+    window.addEventListener("pf-open", onOpen);
+    return () => { window.removeEventListener("pf-filter", onFilter); window.removeEventListener("pf-open", onOpen); };
   }, []);
 
   // หน้าต่างรายละเอียด: Esc ปิด, วนโฟกัส Tab อยู่ในหน้าต่าง, ปิดแล้วคืนโฟกัสให้การ์ดที่กดเปิด

@@ -951,6 +951,35 @@ a.ct-channel:hover { border-color: var(--pf-accent-2); transform: translateY(-2p
 .ai-note a { color: var(--pf-text); font-weight: 700; text-decoration: none; }
 .ai-note a:hover { text-decoration: underline; }
 
+/* การ์ดผลงานในแชต AI */
+.ai-cards { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.ai-card {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  padding: 6px;
+  border: 1px solid var(--pf-border);
+  border-radius: 14px;
+  background: var(--pf-card);
+  color: var(--pf-text);
+  text-align: left;
+  cursor: pointer;
+  animation: pgFade .3s ease;
+  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.ai-card:hover { border-color: var(--pf-accent-2); transform: translateY(-1px); box-shadow: 0 8px 18px rgba(22, 121, 92, .12); }
+.ai-card img { width: 92px; height: 62px; flex-shrink: 0; object-fit: cover; object-position: top; border-radius: 9px; background: var(--pf-soft); }
+.ai-card span { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; }
+.ai-card small { font: 600 10.5px 'DM Mono', monospace; letter-spacing: .5px; color: var(--pf-accent-2); text-transform: uppercase; }
+.ai-card b { font: 700 13.5px 'Noto Sans Thai', sans-serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-card i { font: 600 11.5px 'Noto Sans Thai', sans-serif; font-style: normal; color: var(--pf-accent); }
+.ai-card:focus-visible { outline: 2px solid var(--pf-accent-2); outline-offset: 2px; }
+
+/* เคอร์เซอร์กระพริบระหว่างคำตอบกำลังไหล */
+.ai-caret { display: inline-block; width: 7px; height: 1em; margin-left: 2px; vertical-align: -2px; border-radius: 2px; background: var(--pf-accent-2); animation: aiCaret .8s steps(2) infinite; }
+@keyframes aiCaret { 50% { opacity: 0; } }
+
 [data-theme="dark"] .ai-badge { box-shadow: 0 0 0 2px #0d1412; }
 
 @keyframes aiRipple {

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { LANGUAGES, PROJECTS, SKILL_GROUPS, TEAM, localizeMember } from "../data/portfolio";
+import { LANGUAGES, PROJECTS, SKILL_GROUPS, TEAM, localizeMember, localizeProject } from "../data/portfolio";
 import { useLang, type Lang } from "../i18n";
 
 type Link = { label: string; href: string; external?: boolean };
 // raw/sig: คำตอบดิบจาก AI พร้อมลายเซ็นจากเซิร์ฟเวอร์ — ส่งกลับไปเป็นประวัติแชตได้ (ข้อความที่ไม่มีลายเซ็นจะถูกเซิร์ฟเวอร์ทิ้ง)
-interface Message { from: "bot" | "user"; text: string; links?: Link[]; raw?: string; sig?: string }
+// cards: id ผลงานที่แสดงเป็นการ์ดในแชต, streaming: กำลังรับคำตอบทีละส่วน
+interface Message { from: "bot" | "user"; text: string; links?: Link[]; raw?: string; sig?: string; cards?: string[]; streaming?: boolean }
 
 const BOT_NAME = "IASROM AI";
 // ปุ่มคำถามลัด: ข้อความบนปุ่ม → คำถามที่ส่งจริง (ไทย / อังกฤษ)
@@ -46,6 +47,7 @@ function reply(input: string): Message {
       from: "bot",
       text: `ทีมเราใช้ ${skill.name} ได้ในระดับ ${skill.level}% ครับ` + (used.length ? `\nผลงานที่เกี่ยวข้อง: ${used.map((p) => p.title).join(", ")}` : ""),
       links: used.length ? [{ label: "ดูผลงาน", href: "#projects" }] : undefined,
+      cards: used.slice(0, 3).map((p) => p.id),
     };
   }
 
@@ -108,9 +110,13 @@ const fbLabel = (nickname: string, lang: Lang) => (lang === "en" ? `Message ${ni
 // แปลงคำตอบจาก AI: ดึงแท็ก [[...]] ออกมาเป็นปุ่มลิงก์ และล้าง markdown ที่หลุดมา
 function parseAi(raw: string, lang: Lang): Message {
   const links: Link[] = [];
+  const cards: string[] = [];
   const text = raw.replace(/\[\[([^\]]+)\]\]/g, (_, tag: string) => {
     const t = tag.trim();
-    if (t.startsWith("fb:")) {
+    if (t.startsWith("project:")) {
+      const id = t.slice(8).trim();
+      if (PROJECTS.some((p) => p.id === id) && !cards.includes(id) && cards.length < 3) cards.push(id);
+    } else if (t.startsWith("fb:")) {
       const key = t.slice(3).trim();
       const raw = TEAM.find((x) => x.nickname === key || localizeMember(x, "en").nickname.toLowerCase() === key.toLowerCase());
       if (raw?.facebook) links.push({ label: fbLabel(localizeMember(raw, lang).nickname, lang), href: raw.facebook, external: true });
@@ -123,12 +129,22 @@ function parseAi(raw: string, lang: Lang): Message {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   const unique = links.filter((l, i) => links.findIndex((x) => x.href === l.href) === i);
-  return { from: "bot", text, links: unique.length ? unique : undefined };
+  return { from: "bot", text, links: unique.length ? unique : undefined, cards: cards.length ? cards : undefined };
 }
+
+// ข้อความที่แสดงระหว่างกำลังรับคำตอบ: ซ่อนแท็ก [[...]] (รวมแท็กที่ยังพิมพ์ไม่จบ) และ markdown
+const liveText = (raw: string) => raw
+  .replace(/\[\[[^\]]*\]\]/g, "")
+  .replace(/\[\[[^\]]*$|\[$/, "")
+  .replace(/\*\*/g, "")
+  .replace(/^\s*[-*]\s+/gm, "• ")
+  .replace(/^#+\s*/gm, "")
+  .trimEnd();
 
 class AiError extends Error { constructor(message: string, public status: number) { super(message); } }
 
-async function askAi(history: Message[], lang: Lang): Promise<Message> {
+// เรียก AI แบบ streaming: เรียก onDelta ทุกครั้งที่ได้ข้อความเพิ่ม แล้วคืนคำตอบฉบับเต็มพร้อมลายเซ็น
+async function askAi(history: Message[], lang: Lang, onDelta: (raw: string) => void): Promise<Message> {
   const messages = history
     .filter((m) => m.from === "user" || (m.raw && m.sig))
     .map((m) => m.from === "user" ? { role: "user", content: m.text } : { role: "assistant", content: m.raw, sig: m.sig });
@@ -137,9 +153,30 @@ async function askAi(history: Message[], lang: Lang): Promise<Message> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ lang, messages }),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.reply) throw new AiError(data.error || `HTTP ${res.status}`, res.status);
-  return { ...parseAi(data.reply, lang), raw: data.reply, sig: data.sig };
+  if (!res.ok || !res.body) {
+    const data = await res.json().catch(() => ({}));
+    throw new AiError(data.error || `HTTP ${res.status}`, res.status);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "", raw = "", sig = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const evt = JSON.parse(line);
+      if (evt.d) { raw += evt.d; onDelta(raw); }
+      else if (evt.done) sig = evt.sig;
+      else if (evt.error) throw new AiError(evt.error, 502);
+    }
+  }
+  const final = raw.trim();
+  if (!final) throw new AiError("empty reply", 502);
+  return { ...parseAi(final, lang), raw: final, sig };
 }
 
 // โลโก้ IASROM-DEV (เฉพาะสัญลักษณ์ AD สีขาว พื้นโปร่งใส) สำหรับวางบนพื้นสีเขียว
@@ -201,8 +238,15 @@ export default function ChatAssistant() {
     setText("");
     setTyping(true);
     let answer: Message;
+    let started = false; // มีข้อความ streaming อยู่ในรายการแล้วหรือยัง
+    const showLive = (raw: string) => {
+      if (id !== session.current) return;
+      const msg: Message = { from: "bot", text: liveText(raw), streaming: true };
+      if (!started) { started = true; setMessages((m) => [...m, msg]); }
+      else setMessages((m) => [...m.slice(0, -1), msg]);
+    };
     try {
-      answer = await askAi(history, lang);
+      answer = await askAi(history, lang, showLive);
     } catch (err) {
       if (err instanceof AiError && err.status === 429) {
         // ถูกจำกัดการใช้งาน — แจ้งผู้ใช้ตรง ๆ แทนการตอบแบบสำรอง
@@ -213,7 +257,8 @@ export default function ChatAssistant() {
       }
     }
     if (id !== session.current) return; // แชตถูกปิดไปแล้วระหว่างรอคำตอบ
-    setMessages((m) => [...m, answer]);
+    // แทนที่ข้อความที่กำลังไหลด้วยคำตอบฉบับเต็ม (ลิงก์ + การ์ดผลงาน)
+    setMessages((m) => started ? [...m.slice(0, -1), answer] : [...m, answer]);
     setTyping(false);
   };
 
@@ -247,7 +292,19 @@ export default function ChatAssistant() {
               <div className="ai-row">
                 <span className="ai-mini"><Logo /></span>
                 <div className="ai-msg ai-bot">
-                  <p>{m.text}</p>
+                  <p>{m.text}{m.streaming && <span className="ai-caret" aria-hidden="true" />}</p>
+                  {m.cards && <div className="ai-cards">
+                    {m.cards.map((cid) => {
+                      const raw = PROJECTS.find((p) => p.id === cid);
+                      if (!raw) return null;
+                      const p = localizeProject(raw, lang);
+                      return <button key={cid} type="button" className="ai-card" onClick={() => window.dispatchEvent(new CustomEvent("pf-open", { detail: cid }))}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={p.image} alt="" loading="lazy" />
+                        <span><small>{p.category}</small><b>{p.title}</b><i>{t("ดูรายละเอียด →", "View details →")}</i></span>
+                      </button>;
+                    })}
+                  </div>}
                   {m.links && <div className="ai-links">
                     {m.links.map((l) => <a key={l.href + l.label} href={l.href} target={l.external ? "_blank" : undefined} rel={l.external ? "noopener noreferrer" : undefined} onClick={() => { if (!l.external) close(); }}>{l.label} →</a>)}
                   </div>}
@@ -256,7 +313,7 @@ export default function ChatAssistant() {
             </div>
           : <div key={i} className="ai-msg ai-user"><p>{m.text}</p></div>)}
 
-        {typing && <div className="ai-row">
+        {typing && !messages[messages.length - 1]?.streaming && <div className="ai-row">
           <span className="ai-mini"><Logo /></span>
           <div className="ai-msg ai-bot ai-typing" aria-label={t("กำลังพิมพ์", "Typing")}><span /><span /><span /></div>
         </div>}

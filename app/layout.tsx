@@ -4,9 +4,28 @@ import "./portfolio.css";
 import ServiceWorker from "./components/ServiceWorker";
 import { themeBootScript } from "./theme";
 
+// ลิงก์หลักของเว็บ (ใช้สร้าง URL เต็มของรูปพรีวิวตอนแชร์) — ตั้ง NEXT_PUBLIC_SITE_URL ได้ถ้ามีโดเมนของตัวเอง
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL
+  || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "https://iasrom-dev.vercel.app");
+const TITLE = "IASROM-DEV — เว็บไซต์ แอป ระบบหลังบ้าน และบริการไอที";
+const DESCRIPTION = "ทีมพัฒนาเว็บไซต์ แอปพลิเคชัน ระบบหลังบ้าน LINE OA และ Dashboard พร้อมบริการซ่อมคอม ติดตั้งกล้อง CCTV และระบบเครือข่าย";
+
 export const metadata: Metadata = {
-  title: "IASROM-DEV",
-  description: "IASROM-DEV digital solutions",
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  // การ์ดพรีวิวเวลาแชร์ลิงก์ใน LINE / Facebook / X
+  openGraph: {
+    type: "website",
+    siteName: "IASROM-DEV",
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/",
+    locale: "th_TH",
+    alternateLocale: ["en_US"],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "IASROM-DEV — Websites, Apps, Back-office, IT Services" }],
+  },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: ["/og-image.png"] },
   applicationName: "IASROM-DEV",
   // iOS: เปิดจากหน้าโฮมแบบเต็มจอเหมือนแอป
   appleWebApp: { capable: true, title: "IASROM-DEV", statusBarStyle: "default" },
