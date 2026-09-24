@@ -45,10 +45,10 @@ export const viewport: Viewport = {
 
 // Runs before paint so the saved theme (and first-visit intro) apply without a flash.
 const themeScript = themeBootScript
-  // Intro โลโก้: แสดงเฉพาะครั้งแรกที่เข้าเว็บ และไม่แสดงถ้าผู้ใช้ตั้งค่าลดการเคลื่อนไหว
+  // Intro โลโก้: แสดงเฉพาะครั้งแรกที่เข้าเว็บ — ข้ามเมื่อเข้าผ่านลิงก์เฉพาะ (?chat=1, #projects ฯลฯ) หรือผู้ใช้ลดการเคลื่อนไหว
   // ภาษา: ถ้าเคยเลือก EN ไว้ ซ่อนเนื้อหาไว้ชั่วครู่จน React เปลี่ยนเป็นภาษาอังกฤษ (กันภาษาไทยวาบ)
   + `try{if(localStorage.getItem("lang")==="en"){document.documentElement.lang="en";document.documentElement.classList.add("lang-pending")}}catch(e){}`
-  + `try{if(!localStorage.getItem("intro-seen")&&!matchMedia("(prefers-reduced-motion: reduce)").matches)document.documentElement.classList.add("show-intro")}catch(e){}`;
+  + `try{if(!localStorage.getItem("intro-seen")&&!location.search&&!location.hash&&!matchMedia("(prefers-reduced-motion: reduce)").matches)document.documentElement.classList.add("show-intro")}catch(e){}`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="th" suppressHydrationWarning>

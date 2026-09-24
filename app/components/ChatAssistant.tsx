@@ -215,6 +215,11 @@ export default function ChatAssistant() {
     setTyping(false);
   };
 
+  // เปิดแชตทันทีเมื่อเข้าผ่านลิงก์ ?chat=1 (เช่น เมนู "ถาม AI" ใน LINE OA)
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("chat") === "1") setOpen(true);
+  }, []);
+
   useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" }); }, [messages, typing]);
   // เปิดแชต → โฟกัสช่องพิมพ์, ปิดแชต → คืนโฟกัสให้ปุ่มลอย
   useEffect(() => {
