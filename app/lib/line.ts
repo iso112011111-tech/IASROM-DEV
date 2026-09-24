@@ -45,12 +45,23 @@ async function post(path: string, body: unknown) {
 
 export type LineMessage = Record<string, unknown>;
 export const reply = (replyToken: string, messages: LineMessage[]) => post("/message/reply", { replyToken, messages: messages.slice(0, 5) });
+/** ส่งข้อความหาผู้ใช้โดยตรง (ใช้แจ้งทีม / แจ้งลูกค้าว่าทีมรับเรื่องแล้ว — นับโควตาข้อความของ LINE OA) */
+export const push = (to: string, messages: LineMessage[]) => post("/message/push", { to, messages: messages.slice(0, 5) });
+
+/** ชื่อที่แสดงใน LINE ของผู้ใช้ */
+export async function profileName(userId: string): Promise<string> {
+  try {
+    const res = await fetch(`${API}/profile/${userId}`, { headers: { Authorization: `Bearer ${await token()}` } });
+    return res.ok ? (await res.json()).displayName ?? "ลูกค้า" : "ลูกค้า";
+  } catch { return "ลูกค้า"; }
+}
+
 /** แสดงแอนิเมชัน "กำลังพิมพ์…" ในแชต 1:1 ระหว่างรอ AI */
 export const showLoading = (userId: string, seconds = 20) => post("/chat/loading/start", { chatId: userId, loadingSeconds: seconds });
 
 // ---------------------------------------------------------------- หน้าตา (Flex)
 
-const C = { mint: "#3f9d87", deep: "#16795c", light: "#e9faf3", ink: "#17211e", sub: "#5f716b", line: "#e3ece8", bg: "#f3f6f5" };
+export const C = { mint: "#3f9d87", deep: "#16795c", light: "#e9faf3", ink: "#17211e", sub: "#5f716b", line: "#e3ece8", bg: "#f3f6f5" };
 
 type QR = { label: string; text: string };
 const QUICK_DEFAULT: QR[] = [
@@ -63,18 +74,23 @@ export const quickReply = (items: QR[] = QUICK_DEFAULT) => ({
   items: items.slice(0, 13).map((q) => ({ type: "action", action: { type: "message", label: q.label.slice(0, 20), text: q.text } })),
 });
 
-const text = (t: string, extra: Record<string, unknown> = {}) => ({ type: "text", text: t, wrap: true, color: C.ink, size: "sm", ...extra });
-const uriButton = (label: string, uri: string, primary = false) => ({
+export const text = (t: string, extra: Record<string, unknown> = {}) => ({ type: "text", text: t, wrap: true, color: C.ink, size: "sm", ...extra });
+export const uriButton = (label: string, uri: string, primary = false) => ({
   type: "button", style: primary ? "primary" : "secondary", height: "sm", color: primary ? C.mint : C.light,
   action: { type: "uri", label: label.slice(0, 20), uri },
 });
-const msgButton = (label: string, t: string, primary = false) => ({
+export const msgButton = (label: string, t: string, primary = false) => ({
   type: "button", style: primary ? "primary" : "secondary", height: "sm", color: primary ? C.mint : C.light,
   action: { type: "message", label: label.slice(0, 20), text: t },
 });
+/** ปุ่มที่ส่งข้อมูลกลับมาที่บอท (ไม่แสดงเป็นข้อความในแชต ยกเว้น displayText) */
+export const postbackButton = (label: string, data: string, primary = false, displayText?: string) => ({
+  type: "button", style: primary ? "primary" : "secondary", height: "sm", color: primary ? C.mint : C.light,
+  action: { type: "postback", label: label.slice(0, 20), data, ...(displayText ? { displayText } : {}) },
+});
 
 /** หัวการ์ดสีมิ้นต์ (ลายเส้นเฉียงแบบเดียวกับเว็บใช้ gradient แทน) */
-const header = (title: string, subtitle: string) => ({
+export const header = (title: string, subtitle: string) => ({
   type: "box", layout: "vertical", paddingAll: "20px", spacing: "xs",
   background: { type: "linearGradient", angle: "135deg", startColor: "#5dbfa8", endColor: "#2f8a74" },
   contents: [
@@ -84,15 +100,15 @@ const header = (title: string, subtitle: string) => ({
   ],
 });
 
-const listRow = (icon: string, t: string) => ({
+export const listRow = (icon: string, t: string) => ({
   type: "box", layout: "horizontal", spacing: "md", contents: [
     { type: "text", text: icon, size: "sm", flex: 0 },
     text(t, { flex: 1 }),
   ],
 });
 
-const bubble = (b: Record<string, unknown>) => ({ type: "bubble", size: "mega", styles: { footer: { separator: false } }, ...b });
-const flex = (altText: string, contents: unknown, qr?: ReturnType<typeof quickReply>) =>
+export const bubble = (b: Record<string, unknown>) => ({ type: "bubble", size: "mega", styles: { footer: { separator: false } }, ...b });
+export const flex = (altText: string, contents: unknown, qr?: ReturnType<typeof quickReply>) =>
   ({ type: "flex", altText: altText.slice(0, 400), contents, ...(qr ? { quickReply: qr } : {}) });
 
 export function welcomeMessage(name?: string) {

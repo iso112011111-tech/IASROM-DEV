@@ -1,43 +1,33 @@
-// Webhook ของ LINE OA: รับข้อความ → ตอบด้วยการ์ด (เมนู) หรือ IASROM AI
+// Webhook ของ LINE OA: รับข้อความ → ตอบด้วยการ์ด (เมนู) หรือ IASROM AI Concierge
 // ตั้ง Webhook URL ใน LINE เป็น https://<โดเมน>/api/line
 import { after, NextResponse } from "next/server";
-import { askOnce, takeKey, type ChatMessage } from "../../lib/ai";
+import { askOnce, env, takeKey, type ChatMessage } from "../../lib/ai";
 import {
-  askAiMessage, contactMessage, lineConfigured, linksMessage, parseAiForLine, projectsCarousel, quickReply,
+  acceptedAdminCard, addAdmin, conciergeAddendum, estimateCard, getTicket, handoff, HUMAN_HOURS, isAdmin, listAdmins,
+  loadCustomer, parseConciergeTags, saveCustomer, saveTicket, waitingCard, type Customer,
+} from "../../lib/concierge";
+import {
+  askAiMessage, contactMessage, lineConfigured, linksMessage, parseAiForLine, profileName, projectsCarousel, push, quickReply,
   repairMessage, reply, showLoading, startProjectMessage, validSignature, welcomeMessage, type LineMessage,
 } from "../../lib/line";
+import { estimate } from "../../data/pricing";
 import { PROJECTS } from "../../data/portfolio";
 
 export const preferredRegion = ["sin1"];
 export const maxDuration = 60;
+
+const ADMIN_CODE = env("LINE_ADMIN_CODE");
 
 type LineEvent = {
   type: string;
   replyToken?: string;
   source?: { type: string; userId?: string };
   message?: { type: string; text?: string };
+  postback?: { data: string };
 };
 
-// ความจำบทสนทนาสั้น ๆ ต่อผู้ใช้ (ในหน่วยความจำ — หายเมื่อเซิร์ฟเวอร์รีสตาร์ท)
-const memory = new Map<string, { at: number; history: ChatMessage[] }>();
-const MEMORY_MS = 30 * 60_000;
-function recall(userId: string) {
-  const m = memory.get(userId);
-  return m && Date.now() - m.at < MEMORY_MS ? m.history : [];
-}
-function remember(userId: string, history: ChatMessage[]) {
-  memory.delete(userId);
-  memory.set(userId, { at: Date.now(), history: history.slice(-6) });
-  while (memory.size > 2000) memory.delete(memory.keys().next().value!);
-}
-
-const LINE_ADDENDUM = `
-
-ช่องทาง: ผู้ใช้กำลังคุยผ่าน LINE OA
-- ตอบสั้นกระชับกว่าปกติ (ไม่เกินประมาณ 4 บรรทัด) ใช้อีโมจิได้เล็กน้อย
-- ใช้แท็กลิงก์และแท็ก [[project:<id>]] ได้ตามกฎเดิม (ระบบจะแปลงเป็นปุ่มและการ์ดให้เอง)`;
-
 const isEnglish = (t: string) => /[a-z]/i.test(t) && !/[฀-๿]/.test(t);
+const say = (t: string, withQuick = true): LineMessage => ({ type: "text", text: t, ...(withQuick ? { quickReply: quickReply() } : {}) });
 
 /** ข้อความที่ตรงกับปุ่มในริชเมนู → ตอบด้วยการ์ดทันที ไม่ต้องใช้ AI */
 function menuReply(text: string): LineMessage[] | null {
@@ -48,61 +38,148 @@ function menuReply(text: string): LineMessage[] | null {
   if (["ถาม ai", "ai"].includes(t)) return [askAiMessage()];
   if (["ดูผลงาน", "ผลงาน", "portfolio", "our work"].includes(t)) {
     const carousel = projectsCarousel(PROJECTS.slice(0, 8).map((p) => p.id));
-    return [
-      { type: "text", text: "ตัวอย่างผลงานของทีมครับ 👇 เลื่อนดูได้เลย แตะการ์ดเพื่อดูรายละเอียดบนเว็บ" },
-      ...(carousel ? [{ ...carousel, quickReply: quickReply() }] : []),
-    ];
+    return [say("ตัวอย่างผลงานของทีมครับ 👇 เลื่อนดูได้เลย แตะการ์ดเพื่อดูรายละเอียดบนเว็บ", false), ...(carousel ? [{ ...carousel, quickReply: quickReply() }] : [])];
   }
-  if (["สวัสดี", "หวัดดี", "hello", "hi", "เริ่ม", "เมนู", "menu"].includes(t)) return [welcomeMessage()];
+  if (["สวัสดี", "หวัดดี", "hello", "hi", "เมนู", "menu"].includes(t)) return [welcomeMessage()];
   return null;
 }
 
-async function handleText(event: LineEvent, text: string) {
-  const userId = event.source?.userId ?? "anon";
+// ---------------------------------------------------------------- คำสั่งของทีม
+
+async function adminCommand(userId: string, text: string): Promise<LineMessage[] | null> {
+  const [cmd, arg] = text.trim().split(/\s+/, 2);
+  if (cmd === "/admin") {
+    if (!ADMIN_CODE || arg !== ADMIN_CODE) return [say("รหัสไม่ถูกต้องครับ", false)];
+    const name = await profileName(userId);
+    await addAdmin({ userId, name, addedAt: Date.now() });
+    return [say(`✅ ลงทะเบียน ${name} เป็นทีมแล้ว\nเมื่อลูกค้าขอคุยกับทีม จะมีการ์ดแจ้งเตือนส่งมาที่แชตนี้ พร้อมปุ่ม "รับเรื่อง"\n\nพิมพ์ /team เพื่อดูรายชื่อทีม`, false)];
+  }
+  if (!cmd.startsWith("/") || !(await isAdmin(userId))) return null;
+  if (cmd === "/team") {
+    const admins = await listAdmins();
+    return [say(`ทีมที่รับแจ้งเตือน (${admins.length} คน)\n${admins.map((a) => `• ${a.name}`).join("\n")}`, false)];
+  }
+  return [say("คำสั่งทีม:\n/team — ดูรายชื่อทีมที่รับแจ้งเตือน\n\nรับเรื่อง / คืนให้ AI ใช้ปุ่มบนการ์ดแจ้งเตือนได้เลย", false)];
+}
+
+// ---------------------------------------------------------------- ลูกค้า
+
+async function startHandoff(event: LineEvent, c: Customer, reason: string, extra: LineMessage[] = []) {
+  const { notified, isNew } = await handoff(c, reason);
+  await saveCustomer(c);
+  const note = !isNew
+    ? say("แจ้งทีมไว้แล้วครับ 🙏 ทีมจะมาตอบในแชตนี้เร็ว ๆ นี้ ระหว่างรอถามผมต่อได้เลย")
+    : notified === 0 ? say("รับเรื่องไว้แล้วครับ 🙏 ทีมจะติดต่อกลับในแชตนี้ ระหว่างรอถามผมต่อได้เลย") : waitingCard();
+  return reply(event.replyToken!, [...extra, note].slice(-5));
+}
+
+async function handleCustomerText(event: LineEvent, c: Customer, text: string) {
+  // ทีมรับเรื่องอยู่ → AI เงียบ ให้ทีมตอบเองในหน้าแชตของ LINE OA
+  if (c.mode === "human") return;
+
   const quick = menuReply(text);
   if (quick) return reply(event.replyToken!, quick);
+  if (/^(คุยกับคน|คุยกับทีม|ขอคุยกับเจ้าหน้าที่|talk to (a )?human)/i.test(text.trim())) return startHandoff(event, c, "ลูกค้าขอคุยกับทีม");
 
-  if (!takeKey(`line:${userId}`, 8)) {
-    return reply(event.replyToken!, [{ type: "text", text: "ส่งข้อความถี่ไปนิดครับ รอสักครู่แล้วลองใหม่นะครับ 🙏", quickReply: quickReply() }]);
-  }
+  if (!takeKey(`line:${c.userId}`, 8)) return reply(event.replyToken!, [say("ส่งข้อความถี่ไปนิดครับ รอสักครู่แล้วลองใหม่นะครับ 🙏")]);
 
-  if (event.source?.type === "user" && event.source.userId) await showLoading(event.source.userId, 20);
+  await showLoading(c.userId, 25);
   const lang = isEnglish(text) ? "en" : "th";
-  const history: ChatMessage[] = [...recall(userId), { role: "user", content: text.slice(0, 500) }];
-  const answer = await askOnce(history, lang, LINE_ADDENDUM);
+  const history: ChatMessage[] = [...c.history, { role: "user", content: text.slice(0, 500) }];
+  const answer = await askOnce(history, lang, conciergeAddendum(c));
 
   if (!answer || answer === "budget") {
-    return reply(event.replyToken!, [{
-      type: "text",
-      text: answer === "budget"
-        ? "ตอนนี้มีคนใช้ผู้ช่วยเยอะมากครับ ลองใหม่อีกสักครู่ หรือกดเมนู \"ติดต่อทีม\" เพื่อคุยกับทีมโดยตรงได้เลย"
-        : "ขออภัยครับ ผู้ช่วยตอบไม่ได้ชั่วคราว 🙏 กดเมนู \"ติดต่อทีม\" เพื่อคุยกับทีมโดยตรงได้เลยครับ",
-      quickReply: quickReply(),
-    }]);
+    return reply(event.replyToken!, [say(answer === "budget"
+      ? "ตอนนี้มีคนใช้ผู้ช่วยเยอะมากครับ ลองใหม่อีกสักครู่ หรือกด \"ติดต่อทีม\" เพื่อคุยกับทีมโดยตรง"
+      : "ขออภัยครับ ผู้ช่วยตอบไม่ได้ชั่วคราว 🙏 กด \"ติดต่อทีม\" เพื่อคุยกับทีมโดยตรงได้เลยครับ")]);
   }
-  remember(userId, [...history, { role: "assistant", content: answer }]);
 
-  const { text: clean, cards, links } = parseAiForLine(answer, lang);
+  const tags = parseConciergeTags(answer);
+  if (tags.brief) c.brief = tags.brief;
+  const est = tags.estimateSpec ? estimate(tags.estimateSpec) : null;
+  if (est && tags.estimateSpec) c.estimateSpec = tags.estimateSpec;
+  c.history = [...history, { role: "assistant", content: answer }];
+
+  const { text: clean, cards, links } = parseAiForLine(tags.rest, lang);
+  const messages: LineMessage[] = [say(clean.slice(0, 4900) || "…", false)];
   const carousel = projectsCarousel(cards, lang);
-  const buttons = linksMessage(links, lang);
-  const messages: LineMessage[] = [{ type: "text", text: clean.slice(0, 4900) || "…" }];
   if (carousel) messages.push(carousel);
-  if (buttons) messages.push(buttons);
-  // quick reply แสดงได้เฉพาะข้อความสุดท้าย
+  if (est) messages.push(estimateCard(est));
+  const buttons = linksMessage(links, lang);
+  if (buttons && messages.length < 4) messages.push(buttons);
+
+  if (tags.handoff) return startHandoff(event, c, tags.estimateSpec ? "ลูกค้าพร้อมคุยเรื่องราคา" : "AI ประเมินว่าควรส่งต่อทีม", messages.slice(0, 4));
+
+  await saveCustomer(c);
   messages[messages.length - 1] = { ...messages[messages.length - 1], quickReply: quickReply() };
   return reply(event.replyToken!, messages);
 }
 
+// ---------------------------------------------------------------- ปุ่ม (postback)
+
+async function handlePostback(event: LineEvent, userId: string, data: string) {
+  const p = new URLSearchParams(data);
+  const action = p.get("a");
+
+  if (action === "handoff") {
+    const c = await loadCustomer(userId, () => profileName(userId));
+    if (c.mode === "human") return reply(event.replyToken!, [say("ทีมกำลังดูแลเรื่องนี้อยู่ครับ จะตอบในแชตนี้เร็ว ๆ นี้ 🙏", false)]);
+    return startHandoff(event, c, p.get("r") === "estimate" ? "ลูกค้าขอให้ทีมยืนยันราคา" : "ลูกค้าขอคุยกับทีม");
+  }
+
+  if (action === "accept" || action === "release") {
+    if (!(await isAdmin(userId))) return reply(event.replyToken!, [say("ปุ่มนี้สำหรับทีมเท่านั้นครับ", false)]);
+    const ticket = await getTicket(p.get("t") ?? "");
+    if (!ticket) return reply(event.replyToken!, [say("ไม่พบเรื่องนี้แล้วครับ", false)]);
+    const c = await loadCustomer(ticket.userId, async () => ticket.name);
+    const adminName = await profileName(userId);
+
+    if (action === "accept") {
+      if (ticket.status === "accepted" && ticket.acceptedBy !== adminName) {
+        return reply(event.replyToken!, [say(`${ticket.acceptedBy} รับเรื่อง ${ticket.id} ไปแล้วครับ`, false)]);
+      }
+      Object.assign(ticket, { status: "accepted", acceptedBy: adminName });
+      Object.assign(c, { mode: "human", humanBy: adminName, humanUntil: Date.now() + HUMAN_HOURS * 3_600_000 });
+      await Promise.all([saveTicket(ticket), saveCustomer(c)]);
+      await push(ticket.userId, [say(`✅ ${adminName} จากทีม IASROM-DEV รับเรื่องแล้ว กำลังมาตอบในแชตนี้ครับ`, false)]);
+      return reply(event.replyToken!, [acceptedAdminCard(ticket)]);
+    }
+
+    Object.assign(ticket, { status: "closed" });
+    Object.assign(c, { mode: "ai", humanBy: undefined, humanUntil: undefined, ticketId: undefined });
+    await Promise.all([saveTicket(ticket), saveCustomer(c)]);
+    return reply(event.replyToken!, [say(`🤖 คืนให้ AI แล้ว — AI จะกลับมาดูแล ${ticket.name} ต่อครับ`, false)]);
+  }
+}
+
+// ---------------------------------------------------------------- จัดการ event
+
 async function handle(event: LineEvent) {
   if (!event.replyToken) return;
+  const userId = event.source?.userId;
   try {
     if (event.type === "follow") return reply(event.replyToken, [welcomeMessage()]);
-    if (event.type === "message" && event.message?.type === "text" && event.message.text) return handleText(event, event.message.text);
-    if (event.type === "message") {
-      return reply(event.replyToken, [{ type: "text", text: "ได้รับแล้วครับ 👍 ถ้าเป็นเรื่องแจ้งซ่อม ทีมจะดูรูป/ไฟล์ให้ หรือพิมพ์คำถามมาได้เลยครับ", quickReply: quickReply() }]);
+    if (event.type === "postback" && userId && event.postback?.data) return handlePostback(event, userId, event.postback.data);
+    if (event.type !== "message" || !userId) return;
+
+    if (event.message?.type === "text" && event.message.text) {
+      const text = event.message.text;
+      if (text.startsWith("/")) {
+        const res = await adminCommand(userId, text);
+        if (res) return reply(event.replyToken, res);
+      }
+      if (event.source?.type !== "user") return; // แชตกลุ่ม: ไม่ตอบ
+      const c = await loadCustomer(userId, () => profileName(userId));
+      return handleCustomerText(event, c, text);
     }
+
+    // รูป / ไฟล์ / สติกเกอร์
+    const c = await loadCustomer(userId, () => profileName(userId));
+    if (c.mode === "human") return;
+    return reply(event.replyToken, [say("ได้รับแล้วครับ 👍 ถ้าเป็นรูปอาการเสีย ทีมจะดูให้ — พิมพ์เล่าอาการเพิ่มได้เลย หรือกด \"ติดต่อทีม\"")]);
   } catch (err) {
     console.error("LINE event failed", err);
+    try { await reply(event.replyToken, [say("ขออภัยครับ ระบบขัดข้องชั่วคราว กด \"ติดต่อทีม\" เพื่อคุยกับทีมโดยตรงได้เลย")]); } catch {}
   }
 }
 
@@ -120,7 +197,7 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true });
 }
 
-// LINE / เบราว์เซอร์เช็กว่ามี endpoint อยู่
 export function GET() {
   return NextResponse.json({ ok: true, service: "IASROM-DEV LINE webhook" });
 }
+
