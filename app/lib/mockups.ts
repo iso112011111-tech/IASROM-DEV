@@ -1,7 +1,7 @@
 // AI Studio: ลูกค้าเล่าธุรกิจสั้นๆ → AI ออกแบบหน้าเว็บตัวอย่างให้ดูทันที (แชร์ลิงก์ได้)
 // ความปลอดภัย: ให้ AI ตอบเป็น "ข้อมูล" (JSON) เท่านั้น แล้วเราตรวจ/ตัดความยาว/เช็กสีเอง ก่อนเรนเดอร์ด้วยเทมเพลตของเรา
 // → AI เขียน HTML/สคริปต์ใส่หน้าเว็บไม่ได้เลย
-import { complete } from "./ai";
+import { complete, FALLBACK_MODEL, MODEL } from "./ai";
 import { token, validToken } from "./ids";
 import { store } from "./store";
 
@@ -81,16 +81,19 @@ export function cleanMockup(raw: Record<string, unknown>, prompt: Mockup["prompt
 /** ให้ AI ออกแบบ แล้วบันทึกไว้ให้แชร์ลิงก์ได้ */
 export async function generateMockup(prompt: Mockup["prompt"]): Promise<Mockup | "budget" | null> {
   const ask = `ธุรกิจ: ${prompt.business}\nชื่อร้าน/แบรนด์: ${prompt.name || "(ช่วยตั้งให้)"}\nสไตล์ที่อยากได้: ${prompt.vibe || "(เลือกให้เหมาะ)"}`;
-  const out = await complete([{ role: "system", content: SYSTEM }, { role: "user", content: ask }], 45_000);
-  if (out === "budget") return "budget";
-  if (!out) return null;
-  const json = out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1);
-  try {
-    const m = cleanMockup(JSON.parse(json), prompt);
-    await store.set(COL, m.id, m);
-    return m;
-  } catch {
-    console.error("mockup JSON parse failed", out.slice(0, 200));
-    return null;
+  const messages = [{ role: "system", content: SYSTEM }, { role: "user", content: ask }];
+  // บางครั้งโมเดลหลักค้าง → ให้เวลา 26 วิ แล้วสลับไปโมเดลสำรองอีก 28 วิ (รวมไม่เกินเวลาสูงสุดของฟังก์ชัน 60 วิ)
+  for (const [model, ms] of [[MODEL, 26_000], [FALLBACK_MODEL, 28_000]] as const) {
+    const out = await complete(messages, ms, model);
+    if (out === "budget") return "budget";
+    const json = out ? out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1) : "";
+    try {
+      const m = cleanMockup(JSON.parse(json), prompt);
+      await store.set(COL, m.id, m);
+      return m;
+    } catch {
+      console.error(`mockup attempt failed (${model})`, out ? out.slice(0, 200) : "no response");
+    }
   }
+  return null;
 }

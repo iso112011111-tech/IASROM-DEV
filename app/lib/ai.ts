@@ -104,8 +104,8 @@ export type ChatMessage = { role: "user" | "assistant"; content: string };
 export const systemPrompt = (lang: "th" | "en", extra = "") => (lang === "en" ? SYSTEM_PROMPT + EN_ADDENDUM : SYSTEM_PROMPT) + extra;
 
 /** เรียก AI (ลองโมเดลหลักก่อน แล้วโมเดลสำรอง) — คืน Response ของผู้ให้บริการ หรือ null ถ้าไม่สำเร็จ / "budget" ถ้าเกินโควตารวม */
-export async function callModel(messages: { role: string; content: string }[], opts: { stream: boolean; signal?: AbortSignal }): Promise<Response | null | "budget"> {
-  for (const model of [...new Set([MODEL, FALLBACK_MODEL])]) {
+export async function callModel(messages: { role: string; content: string }[], opts: { stream: boolean; signal?: AbortSignal; model?: string }): Promise<Response | null | "budget"> {
+  for (const model of opts.model ? [opts.model] : [...new Set([MODEL, FALLBACK_MODEL])]) {
     if (!takeGlobal()) return "budget";
     const res = await fetch(`${API_BASE}/chat/completions`, {
       method: "POST",
@@ -126,11 +126,11 @@ export const askOnce = (history: ChatMessage[], lang: "th" | "en", extra = "") =
   complete([{ role: "system", content: systemPrompt(lang, extra) }, ...history]);
 
 /** เรียก AI ด้วยข้อความที่กำหนดเอง แล้วรวมคำตอบแบบ stream เป็นข้อความเดียว */
-export async function complete(messages: { role: string; content: string }[], timeoutMs = 50_000): Promise<string | "budget" | null> {
+export async function complete(messages: { role: string; content: string }[], timeoutMs = 50_000, model?: string): Promise<string | "budget" | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await callModel(messages, { stream: true, signal: controller.signal });
+    const res = await callModel(messages, { stream: true, signal: controller.signal, model });
     if (!res || res === "budget") return res;
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
