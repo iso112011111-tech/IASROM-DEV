@@ -151,11 +151,20 @@ export async function refreshInvoice(inv: Invoice, minGapMs = 4_000): Promise<In
   return updated;
 }
 
+/** บิลที่ยังต้องคอยเช็กกับ Omise: รอชำระ หรือยกเลิกแล้วแต่ QR เดิมยังไม่หมดอายุ (PromptPay ยกเลิก QR ก่อนเวลาไม่ได้ ลูกค้าอาจสแกนจ่ายทีหลัง) */
+export const needsCheck = (inv: Invoice) =>
+  inv.status === "pending" || (inv.status === "canceled" && Date.now() < inv.expiresAt + 10 * 60_000);
+
 export async function cancelInvoice(inv: Invoice) {
   const fresh = await refreshInvoice(inv, 0);
   if (fresh.status !== "pending") throw new Error(fresh.status === "paid" ? "บิลนี้ชำระแล้ว ยกเลิกไม่ได้" : "บิลนี้ปิดไปแล้ว");
-  await omise(`/charges/${encodeURIComponent(fresh.chargeId)}/expire`, { method: "POST" }).catch(() => null);
+  // Omise ไม่ให้ยกเลิก QR PromptPay ก่อนหมดอายุ — ซ่อน QR จากหน้าลูกค้า แล้วระบบยังคอยเช็กต่อจนหมดเวลา (ถ้ามีคนจ่าย จะเปลี่ยนเป็น "ชำระแล้ว" เอง)
   await saveInvoice({ ...fresh, status: "canceled" });
+}
+
+/** เช็กบิลที่ค้างอยู่ทั้งหมด (เรียกเบื้องหลังตอนเปิดหลังบ้าน — เผื่อ webhook ไม่มา) */
+export async function refreshOpenInvoices(list: Invoice[]) {
+  await Promise.all(list.filter(needsCheck).slice(0, 10).map((i) => refreshInvoice(i, 60_000).catch(() => null)));
 }
 
 /** ดึงรูป QR (SVG) จาก Omise ฝั่งเซิร์ฟเวอร์ แล้วส่งให้หน้าเว็บเป็น data URI (ลิงก์จริงของ Omise ไม่หลุดไปฝั่งลูกค้า) */

@@ -301,9 +301,9 @@ function Billing({ data, busy, preset, act }: { data: Data; busy: boolean; prese
           <div className="adm-row-main"><b>{satang(i.amount)} · {i.name}</b><small>{i.description} · {i.createdBy} · {ago(i.createdAt)}{i.testMode ? " · ทดสอบ" : ""}</small></div>
           <div className="adm-inv-side">
             <i className={`adm-pill ${PAY[i.status][1]}`}>{PAY[i.status][0]}</i>
+            {(i.status === "pending" || (i.status === "canceled" && Date.now() < i.expiresAt + 600_000)) && <button className="adm-ghost sm" disabled={busy} onClick={() => act({ type: "refreshInvoice", invoiceId: i.id }, "เช็กสถานะแล้ว")}>เช็ก</button>}
             {i.status === "pending" && <>
-              <button className="adm-ghost sm" disabled={busy} onClick={() => act({ type: "refreshInvoice", invoiceId: i.id }, "เช็กสถานะแล้ว")}>เช็ก</button>
-              <button className="adm-ghost sm" disabled={busy} onClick={() => { if (window.confirm(`ยกเลิกบิล ${satang(i.amount)} ของ ${i.name}?`)) act({ type: "cancelInvoice", invoiceId: i.id }, "ยกเลิกบิลแล้ว"); }}>ยกเลิก</button>
+              <button className="adm-ghost sm" disabled={busy} onClick={() => { if (window.confirm(`ยกเลิกบิล ${satang(i.amount)} ของ ${i.name}?\n\nหน้าชำระเงินจะซ่อน QR ทันที แต่ถ้าลูกค้าบันทึกรูป QR ไว้แล้ว ยังสแกนจ่ายได้จนหมดเวลา (ระบบจะตรวจให้และเปลี่ยนเป็น “ชำระแล้ว” เองถ้ามีการจ่าย)`)) act({ type: "cancelInvoice", invoiceId: i.id }, "ยกเลิกบิลแล้ว"); }}>ยกเลิก</button>
             </>}
             <a className="adm-ghost sm" href={i.url} target="_blank" rel="noopener noreferrer">เปิด ↗</a>
           </div>

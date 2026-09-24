@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { formatSatang, getInvoice, qrDataUri, refreshInvoice } from "../../lib/payments";
+import { formatSatang, getInvoice, needsCheck, qrDataUri, refreshInvoice } from "../../lib/payments";
 import PayStatus from "./PayStatus";
 import "../pay.css";
 
@@ -12,7 +12,7 @@ export default async function PayPage({ params }: { params: Promise<{ id: string
   const { id } = await params;
   const found = await getInvoice(id);
   if (!found) notFound();
-  const inv = found.status === "pending" ? await refreshInvoice(found, 0).catch(() => found) : found;
+  const inv = needsCheck(found) ? await refreshInvoice(found).catch(() => found) : found;
   const qr = inv.status === "pending" ? await qrDataUri(inv) : null;
 
   return <main className="pay-page">

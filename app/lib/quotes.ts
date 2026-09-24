@@ -89,15 +89,23 @@ export function cleanQuote(input: Partial<Quote>, base: Quote): Quote {
 
 export async function sendQuote(q: Quote) {
   if (!quoteTotal(q)) throw new Error("ยอดรวมเป็น 0 — ใส่ราคาก่อนส่ง");
+  // กดส่งซ้อนกัน → ส่งได้ครั้งเดียว
+  if (!(await store.create("quote_locks", `send_${q.id}`, { at: Date.now() }))) throw new Error("ใบนี้กำลังส่ง/ส่งไปแล้ว");
   const sent: Quote = { ...q, status: "sent", sentAt: Date.now() };
+  // ส่งไลน์ก่อน ถ้าไม่สำเร็จ ใบยังเป็น "ร่าง" ให้ลองส่งใหม่ได้
+  if (!(await push(q.userId, [quoteCard(sent)]).catch(() => false))) {
+    await store.delete("quote_locks", `send_${q.id}`);
+    throw new Error("ส่งเข้าไลน์ไม่สำเร็จ ลองใหม่อีกครั้ง");
+  }
   await saveQuote(sent);
-  await push(q.userId, [quoteCard(sent)]);
   return sent;
 }
 
 /** ลูกค้ากดยอมรับ → แจ้งทีม + ออกบิลมัดจำอัตโนมัติ (ถ้าเปิดระบบชำระเงินไว้) */
 export async function acceptQuote(q: Quote) {
   if (q.status !== "sent" || quoteExpired(q)) throw new Error("ใบเสนอราคานี้ตอบรับไม่ได้แล้ว");
+  // กดตอบรับ/ปฏิเสธซ้อนกันหลายครั้ง → ทำได้ครั้งเดียว (กันออกบิลมัดจำซ้ำ)
+  if (!(await store.create("quote_locks", `respond_${q.id}`, { at: Date.now(), action: "accept" }))) throw new Error("ใบเสนอราคานี้ตอบไปแล้ว");
   const accepted: Quote = { ...q, status: "accepted", respondedAt: Date.now() };
   await saveQuote(accepted);
   const deposit = quoteDeposit(q);
@@ -117,6 +125,7 @@ export async function acceptQuote(q: Quote) {
 
 export async function declineQuote(q: Quote) {
   if (q.status !== "sent") throw new Error("ใบเสนอราคานี้ตอบไปแล้ว");
+  if (!(await store.create("quote_locks", `respond_${q.id}`, { at: Date.now(), action: "decline" }))) throw new Error("ใบเสนอราคานี้ตอบไปแล้ว");
   const d: Quote = { ...q, status: "declined", respondedAt: Date.now() };
   await saveQuote(d);
   await notifyTeam(`ลูกค้าปฏิเสธใบเสนอราคา\n${q.name} · ${q.title} (${q.no})\nลองทักไปคุยต่อได้ครับ`);

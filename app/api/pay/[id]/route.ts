@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { takeKey } from "../../../lib/ai";
-import { getInvoice, refreshInvoice } from "../../../lib/payments";
+import { getInvoice, needsCheck, refreshInvoice } from "../../../lib/payments";
 
 export const preferredRegion = ["sin1"];
 export const dynamic = "force-dynamic";
@@ -12,6 +12,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   const inv = await getInvoice(id);
   if (!inv) return NextResponse.json({ error: "not found" }, { status: 404 });
-  const fresh = inv.status === "pending" ? await refreshInvoice(inv).catch(() => inv) : inv;
+  const fresh = needsCheck(inv) ? await refreshInvoice(inv).catch(() => inv) : inv;
   return NextResponse.json({ status: fresh.status }, { headers: { "Cache-Control": "no-store" } });
 }

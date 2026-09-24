@@ -59,8 +59,12 @@ export async function createBooking(input: { service: string; date: string; slot
 
   const b: Booking = {
     id: token(), no: docNo("BK"), ...(input.userId ? { userId: input.userId } : {}), name, phone, service: service.id,
-    date: input.date, slot: input.slot, note: String(input.note ?? "").trim().slice(0, 300), status: "pending", createdAt: Date.now(),
+    date: input.date, slot: input.slot, note: String(input.note ?? "").replace(/[\r\u0000-\u0008\u000b-\u001f\u007f]/g, "").trim().slice(0, 300), status: "pending", createdAt: Date.now(),
   };
+  // กันคนเดียวจองกินทุกช่อง: เบอร์เดียว/ไลน์เดียว มีคิวที่ยังไม่ถึงได้ไม่เกิน 2 คิว
+  const today = thaiDate();
+  const active = (await listBookings()).filter((x) => (x.status === "pending" || x.status === "confirmed") && x.date >= today && (x.phone === phone || (b.userId && x.userId === b.userId)));
+  if (active.length >= 2) throw new Error("คุณมีคิวที่ยังไม่ถึง 2 คิวแล้ว — ถ้าต้องการเปลี่ยนเวลา ทักทีมในไลน์ได้เลยครับ");
   if (!(await store.create(LOCKS, lockId(b.date, b.slot), { key: lockId(b.date, b.slot), bookingId: b.id }))) throw new Error("ช่วงเวลานี้มีคนจองไปแล้ว ลองเลือกเวลาอื่นครับ");
   await saveBooking(b);
 
@@ -70,7 +74,11 @@ export async function createBooking(input: { service: string; date: string; slot
   return b;
 }
 
+const TRANSITIONS: Record<BookingStatus, BookingStatus[]> = { pending: ["confirmed", "canceled"], confirmed: ["done", "canceled"], canceled: [], done: [] };
+
 export async function setBookingStatus(b: Booking, status: BookingStatus) {
+  // คิวที่ยกเลิกแล้วคืนช่องเวลาไปแล้ว → เปิดกลับไม่ได้ (กันจองชนกับคนที่จองช่องนั้นต่อ)
+  if (!TRANSITIONS[b.status].includes(status)) throw new Error("เปลี่ยนสถานะคิวนี้แบบนี้ไม่ได้");
   const next = { ...b, status };
   await saveBooking(next);
   if (status === "canceled") await store.delete(LOCKS, lockId(b.date, b.slot));
@@ -137,7 +145,7 @@ export function bookInviteCard(url: string): LineMessage {
 
 // ---------------------------------------------------------------- ปฏิทิน (ICS) ให้ทีม subscribe ใน Google Calendar
 export function bookingsIcs(list: Booking[]) {
-  const esc = (s: string) => s.replace(/[\\;,]/g, (m) => `\\${m}`).replace(/\n/g, "\\n");
+  const esc = (s: string) => s.replace(/\r/g, "").replace(/[\\;,]/g, (m) => `\\${m}`).replace(/\n/g, "\\n");
   const stamp = (t: number) => new Date(t).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
   const events = list.filter((b) => b.status === "pending" || b.status === "confirmed").map((b) => {
     const s = serviceOf(b), start = slotTime(b.date, b.slot);

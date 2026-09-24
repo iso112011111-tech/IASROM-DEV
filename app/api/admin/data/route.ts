@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { estimate } from "../../../data/pricing";
 import { requireAdmin } from "../../../lib/adminAuth";
 import { getConfig, listAdmins, type Customer, type Ticket } from "../../../lib/concierge";
-import { listInvoices, paymentsConfigured, paymentsTestMode, payUrl } from "../../../lib/payments";
+import { after } from "next/server";
+import { listInvoices, paymentsConfigured, paymentsTestMode, payUrl, refreshOpenInvoices } from "../../../lib/payments";
 import { listBookings, SERVICES } from "../../../lib/bookings";
 import { signLink } from "../../../lib/ids";
 import { jobUrl, listJobs, warrantyUntil } from "../../../lib/jobs";
@@ -23,6 +24,7 @@ export async function GET(req: Request) {
     getConfig(), listAdmins(), getPricing(), store.list<Customer>("line_customers"), store.list<Ticket>("line_tickets"), listInvoices(),
     listQuotes(), listJobs(), listBookings(), listReviews(),
   ]);
+  after(() => refreshOpenInvoices(invoices)); // เช็กยอดบิลค้างกับ Omise เบื้องหลัง (ผลขึ้นในรอบโหลดถัดไป)
   const now = Date.now();
   const withEstimate = <T extends { estimateSpec?: string }>(x: T) => {
     const e = x.estimateSpec ? estimate(x.estimateSpec, pricing) : null;

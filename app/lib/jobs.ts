@@ -39,6 +39,7 @@ export const jobUrl = (j: Pick<Job, "id">) => `${SITE}/t/${j.id}`;
 export const jobDone = (j: Job) => j.current >= j.stages.length - 1;
 export const warrantyUntil = (j: Job) => (j.deliveredAt && j.warrantyMonths ? j.deliveredAt + j.warrantyMonths * 30.44 * 86_400_000 : null);
 
+const notify = (userId: string, card: LineMessage) => push(userId, [card]).catch((err) => console.error("job push failed", err));
 const str = (v: unknown, max: number) => String(v ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 
 export async function createJob(input: { kind: JobKind; userId?: string; name: string; title: string; device?: string; createdBy: string }) {
@@ -53,7 +54,8 @@ export async function createJob(input: { kind: JobKind; userId?: string; name: s
     stages: STAGES[kind], current: 0, stageAt: [now], updates: [], createdBy: input.createdBy, createdAt: now, updatedAt: now,
   };
   await saveJob(job);
-  if (job.userId) await push(job.userId, [jobCard(job, `📋 เปิดงานใหม่ให้แล้ว — ติดตามสถานะได้ตลอดจากลิงก์นี้`)]);
+  // บันทึกงานแล้ว — ส่งไลน์ไม่สำเร็จก็ไม่ถือว่าพัง (ทีมคัดลอกลิงก์ส่งเองได้) กันทีมกดซ้ำจนงานซ้ำ
+  if (job.userId) await notify(job.userId, jobCard(job, `📋 เปิดงานใหม่ให้แล้ว — ติดตามสถานะได้ตลอดจากลิงก์นี้`));
   return job;
 }
 
@@ -67,18 +69,18 @@ export async function moveJob(j: Job, to: number, by: string, note?: string) {
   const next: Job = { ...j, current: idx, stageAt, updates: updates.slice(-50), ...(done && !j.deliveredAt ? { deliveredAt: Date.now() } : {}) };
   await saveJob(next);
   if (next.userId && idx !== j.current) {
-    await push(next.userId, [jobCard(next, done ? "✅ งานเสร็จเรียบร้อย ขอบคุณที่ไว้ใจ IASROM-DEV ครับ" : `🔔 อัปเดตงาน: ตอนนี้อยู่ขั้น "${next.stages[idx]}"${note ? `\n${str(note, 200)}` : ""}`)]);
+    await notify(next.userId, jobCard(next, done ? "✅ งานเสร็จเรียบร้อย ขอบคุณที่ไว้ใจ IASROM-DEV ครับ" : `🔔 อัปเดตงาน: ตอนนี้อยู่ขั้น "${next.stages[idx]}"${note ? `\n${str(note, 200)}` : ""}`));
     if (done) await inviteReview(next.userId, `job:${next.id}`, next.title, next.name).catch(() => null);
   }
   return next;
 }
 
-export async function addJobUpdate(j: Job, note: string, by: string, notify = true) {
+export async function addJobUpdate(j: Job, note: string, by: string, sendLine = true) {
   const t = str(note, 500);
   if (!t) throw new Error("ใส่ข้อความอัปเดตก่อน");
   const next: Job = { ...j, updates: [...j.updates, { at: Date.now(), text: t, by }].slice(-50) };
   await saveJob(next);
-  if (notify && next.userId) await push(next.userId, [jobCard(next, `💬 ${t}`)]);
+  if (sendLine && next.userId) await notify(next.userId, jobCard(next, `💬 ${t}`));
   return next;
 }
 

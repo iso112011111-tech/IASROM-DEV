@@ -1,10 +1,11 @@
 // Webhook ของ LINE OA: รับข้อความ → ตอบด้วยการ์ด (เมนู) หรือ IASROM AI Concierge
 // ตั้ง Webhook URL ใน LINE เป็น https://<โดเมน>/api/line
+import { createHash, timingSafeEqual } from "node:crypto";
 import { after, NextResponse } from "next/server";
 import { askOnce, env, takeKey, type ChatMessage } from "../../lib/ai";
 import {
   acceptedAdminCard, addAdmin, adminQuick, conciergeAddendum, customerListCard, estimateCard, getConfig, getTicket, handoff,
-  HUMAN_HOURS, isAdmin, listAdmins, loadCustomer, muteCustomer, parseConciergeTags, recentCustomers, saveCustomer, saveTicket,
+  getCustomer, HUMAN_HOURS, isAdmin, listAdmins, loadCustomer, muteCustomer, parseConciergeTags, recentCustomers, saveCustomer, saveTicket,
   setConfig, unmuteCustomer, waitingCard, type Customer,
 } from "../../lib/concierge";
 import {
@@ -22,6 +23,10 @@ export const preferredRegion = ["sin1"];
 export const maxDuration = 60;
 
 const ADMIN_CODE = env("LINE_ADMIN_CODE");
+const sameSecret = (a: string, b: string) => {
+  const x = createHash("sha256").update(a).digest(), y = createHash("sha256").update(b).digest();
+  return timingSafeEqual(x, y);
+};
 
 type LineEvent = {
   type: string;
@@ -65,7 +70,9 @@ async function toolReply(text: string, c: Customer): Promise<LineMessage[] | nul
 async function adminCommand(userId: string, text: string): Promise<LineMessage[] | null> {
   const [cmd, arg] = text.trim().split(/\s+/, 2);
   if (cmd === "/admin") {
-    if (!ADMIN_CODE || arg !== ADMIN_CODE) return [say("รหัสไม่ถูกต้องครับ", false)];
+    // กันสุ่มรหัส: 3 ครั้ง/นาทีต่อบัญชี และเทียบแบบเวลาคงที่
+    if (!takeKey(`admin-code:${userId}`, 3)) return [say("ลองบ่อยเกินไป รอสักครู่แล้วลองใหม่ครับ", false)];
+    if (!ADMIN_CODE || !sameSecret(arg ?? "", ADMIN_CODE)) return [say("รหัสไม่ถูกต้องครับ", false)];
     const name = await profileName(userId);
     await addAdmin({ userId, name, addedAt: Date.now() });
     return [{ type: "text", text: `✅ ลงทะเบียน ${name} เป็นทีมแล้ว\n• ลูกค้าขอคุยกับทีม → การ์ดแจ้งเตือนพร้อมปุ่ม "รับเรื่อง" มาที่แชตนี้\n• จะเข้าไปตอบลูกค้าเอง → กด "👥 ลูกค้าล่าสุด" แล้ว "หยุด AI" คนนั้นก่อน\n• ทีมว่างตอบเองทั้งหมด → กด "⏸ หยุด AI ทั้งหมด"`, quickReply: adminQuick() }];
@@ -159,6 +166,7 @@ async function handlePostback(event: LineEvent, userId: string, data: string) {
   const action = p.get("a");
 
   if (action === "handoff") {
+    if (!takeKey(`line:${userId}`, 8)) return;
     const c = await loadCustomer(userId, () => profileName(userId));
     if (c.mode === "human") return reply(event.replyToken!, [say("ทีมกำลังดูแลเรื่องนี้อยู่ครับ จะตอบในแชตนี้เร็ว ๆ นี้ 🙏", false)]);
     return startHandoff(event, c, p.get("r") === "estimate" ? "ลูกค้าขอให้ทีมยืนยันราคา" : "ลูกค้าขอคุยกับทีม");
@@ -167,6 +175,7 @@ async function handlePostback(event: LineEvent, userId: string, data: string) {
   if (action === "mute" || action === "unmute") {
     if (!(await isAdmin(userId))) return reply(event.replyToken!, [say("ปุ่มนี้สำหรับทีมเท่านั้นครับ", false)]);
     const target = p.get("u") ?? "";
+    if (!/^U[0-9a-f]{32}$/.test(target) || !(await getCustomer(target))) return reply(event.replyToken!, [say("ไม่พบลูกค้าคนนี้แล้วครับ", false)]);
     const c = await loadCustomer(target, async () => "ลูกค้า");
     if (action === "mute") {
       await muteCustomer(c, await profileName(userId));

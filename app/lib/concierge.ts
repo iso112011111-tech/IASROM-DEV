@@ -48,6 +48,7 @@ export async function loadCustomer(userId: string, name: () => Promise<string>):
   return { userId, name: await name(), mode: "ai", history: [], updatedAt: Date.now() };
 }
 
+export const getCustomer = (userId: string) => store.get<Customer>("line_customers", userId);
 export const saveCustomer = (c: Customer) => store.set("line_customers", c.userId, { ...c, history: c.history.slice(-10), updatedAt: Date.now() });
 
 export const listAdmins = () => store.list<Admin>("line_admins");
@@ -242,6 +243,6 @@ export async function handoff(c: Customer, reason: string, table: PriceItem[]): 
   await saveTicket(ticket);
   c.ticketId = ticket.id;
   const admins = await listAdmins();
-  await Promise.all(admins.map((a) => push(a.userId, [adminTicketCard(ticket, table)])));
+  await Promise.all(admins.map((a) => push(a.userId, [adminTicketCard(ticket, table)]).catch((err) => console.error("handoff push failed", err))));
   return { ticket, notified: admins.length, isNew: true };
 }
