@@ -27,13 +27,14 @@ export default function PayStatus({ id, initial, expiresAt, qr, amount }: { id: 
     const img = new Image();
     img.src = qr;
     await img.decode();
+    // รูปของ Omise เป็นการ์ด Thai QR แนวตั้ง — ขยาย 1.5 เท่าตามสัดส่วนเดิมให้แอปธนาคารอ่านง่าย
+    const w = Math.round((img.naturalWidth || 740) * 1.5), h = Math.round((img.naturalHeight || 1050) * 1.5);
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 900;
+    canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext("2d")!;
     ctx.fillStyle = "#fff";
-    ctx.fillRect(0, 0, 900, 900);
-    const scale = Math.min(820 / img.width, 820 / img.height);
-    ctx.drawImage(img, (900 - img.width * scale) / 2, (900 - img.height * scale) / 2, img.width * scale, img.height * scale);
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
     const a = document.createElement("a");
     a.href = canvas.toDataURL("image/png");
     a.download = `IASROM-PromptPay-${amount.replace(/,/g, "")}.png`;
