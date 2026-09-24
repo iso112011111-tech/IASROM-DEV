@@ -120,17 +120,32 @@ export async function callModel(messages: { role: string; content: string }[], o
   return null;
 }
 
-/** ถาม AI แบบรอคำตอบเต็ม (ใช้กับ LINE) */
+/** ถาม AI แล้วรอคำตอบเต็ม (ใช้กับ LINE) — เรียกแบบ streaming แล้วรวมข้อความเอง
+ *  (บน Vercel การเรียกแบบไม่ stream กับผู้ให้บริการนี้ค้างได้ ส่วนแบบ stream เริ่มส่งข้อมูลเร็วและเสถียรกว่า) */
 export async function askOnce(history: ChatMessage[], lang: "th" | "en", extra = ""): Promise<string | "budget" | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 45_000);
+  const timer = setTimeout(() => controller.abort(), 50_000);
   try {
-    const res = await callModel([{ role: "system", content: systemPrompt(lang, extra) }, ...history], { stream: false, signal: controller.signal });
+    const res = await callModel([{ role: "system", content: systemPrompt(lang, extra) }, ...history], { stream: true, signal: controller.signal });
     if (!res || res === "budget") return res;
-    const data = await res.json();
-    return data?.choices?.[0]?.message?.content?.trim() || null;
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "", full = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const data = line.trim();
+        if (!data.startsWith("data:") || data.slice(5).trim() === "[DONE]") continue;
+        try { full += JSON.parse(data.slice(5))?.choices?.[0]?.delta?.content ?? ""; } catch { /* ข้ามบรรทัดที่ไม่ใช่ JSON */ }
+      }
+    }
+    return full.trim() || null;
   } catch (err) {
-    console.error("AI request failed", err);
+    console.error("AI request failed", err instanceof Error ? err.message : err);
     return null;
   } finally {
     clearTimeout(timer);
