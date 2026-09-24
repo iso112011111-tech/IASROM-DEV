@@ -82,18 +82,23 @@ export function cleanMockup(raw: Record<string, unknown>, prompt: Mockup["prompt
 export async function generateMockup(prompt: Mockup["prompt"]): Promise<Mockup | "budget" | null> {
   const ask = `ธุรกิจ: ${prompt.business}\nชื่อร้าน/แบรนด์: ${prompt.name || "(ช่วยตั้งให้)"}\nสไตล์ที่อยากได้: ${prompt.vibe || "(เลือกให้เหมาะ)"}`;
   const messages = [{ role: "system", content: SYSTEM }, { role: "user", content: ask }];
-  // บางครั้งโมเดลหลักค้าง → ให้เวลา 26 วิ แล้วสลับไปโมเดลสำรองอีก 28 วิ (รวมไม่เกินเวลาสูงสุดของฟังก์ชัน 60 วิ)
-  for (const [model, ms] of [[MODEL, 26_000], [FALLBACK_MODEL, 28_000]] as const) {
-    const out = await complete(messages, ms, model);
-    if (out === "budget") return "budget";
-    const json = out ? out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1) : "";
-    try {
-      const m = cleanMockup(JSON.parse(json), prompt);
-      await store.set(COL, m.id, m);
-      return m;
-    } catch {
-      console.error(`mockup attempt failed (${model})`, out ? out.slice(0, 200) : "no response");
-    }
+  // บางครั้งโมเดลตอบช้า/ค้าง → ยิงโมเดลหลักและโมเดลสำรองพร้อมกัน ใช้ตัวที่ได้ผลก่อน แล้วยกเลิกอีกตัว
+  const stop = new AbortController();
+  let budget = false;
+  const attempt = async (model: string) => {
+    const out = await complete(messages, 50_000, model, stop.signal);
+    if (out === "budget") { budget = true; throw new Error("budget"); }
+    if (!out) throw new Error(`no response (${model})`);
+    try { return cleanMockup(JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1)), prompt); }
+    catch { throw new Error(`bad JSON (${model}): ${out.slice(0, 120)}`); }
+  };
+  try {
+    const m = await Promise.any([...new Set([MODEL, FALLBACK_MODEL])].map(attempt));
+    stop.abort();
+    await store.set(COL, m.id, m);
+    return m;
+  } catch (err) {
+    console.error("mockup failed", err instanceof AggregateError ? err.errors.map((e) => e.message) : err);
+    return budget ? "budget" : null;
   }
-  return null;
 }

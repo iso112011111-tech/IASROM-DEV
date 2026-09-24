@@ -126,11 +126,12 @@ export const askOnce = (history: ChatMessage[], lang: "th" | "en", extra = "") =
   complete([{ role: "system", content: systemPrompt(lang, extra) }, ...history]);
 
 /** เรียก AI ด้วยข้อความที่กำหนดเอง แล้วรวมคำตอบแบบ stream เป็นข้อความเดียว */
-export async function complete(messages: { role: string; content: string }[], timeoutMs = 50_000, model?: string): Promise<string | "budget" | null> {
+export async function complete(messages: { role: string; content: string }[], timeoutMs = 50_000, model?: string, cancel?: AbortSignal): Promise<string | "budget" | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const signal = cancel ? AbortSignal.any([controller.signal, cancel]) : controller.signal;
   try {
-    const res = await callModel(messages, { stream: true, signal: controller.signal, model });
+    const res = await callModel(messages, { stream: true, signal, model });
     if (!res || res === "budget") return res;
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();

@@ -9,7 +9,7 @@ const IDEAS = [
   { business: "สตูดิโอโยคะและพิลาทิส", vibe: "สงบ ธรรมชาติ" },
   { business: "ร้านหมูกระทะบุฟเฟต์", vibe: "สนุก สีสันจัดจ้าน" },
 ];
-const STEPS = ["กำลังวิเคราะห์ธุรกิจของคุณ…", "เลือกโทนสีและฟอนต์…", "เขียนพาดหัวที่ขายได้…", "จัดวางเลย์เอาต์…", "เก็บรายละเอียดสุดท้าย…"];
+const STEPS = ["กำลังวิเคราะห์ธุรกิจของคุณ…", "เลือกโทนสีและฟอนต์…", "เขียนพาดหัวที่ขายได้…", "จัดวางเลย์เอาต์…", "เก็บรายละเอียดสุดท้าย…", "ใกล้เสร็จแล้ว ตอนนี้คนใช้เยอะนิดนึง…", "อีกแป๊บเดียวครับ ⏳"];
 
 export default function StudioForm() {
   const [business, setBusiness] = useState("");
@@ -19,15 +19,15 @@ export default function StudioForm() {
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
 
+  // ขั้นแรกๆ เปลี่ยนทุก 3 วิ พอเกิน ~15 วิ เปลี่ยนช้าลงเป็นข้อความให้รอ
   useEffect(() => {
-    if (!busy) return;
-    setStep(0);
-    const id = setInterval(() => setStep((s) => Math.min(s + 1, STEPS.length - 1)), 3000);
-    return () => clearInterval(id);
-  }, [busy]);
+    if (!busy || step >= STEPS.length - 1) return;
+    const id = setTimeout(() => setStep((s) => s + 1), step < 4 ? 3000 : 10000);
+    return () => clearTimeout(id);
+  }, [busy, step]);
 
   const go = async () => {
-    setBusy(true); setError("");
+    setStep(0); setBusy(true); setError("");
     try {
       const res = await fetch("/api/studio", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ business, name, vibe }) });
       const d = await res.json().catch(() => ({}));
