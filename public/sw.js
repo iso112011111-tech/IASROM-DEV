@@ -1,5 +1,5 @@
 // IASROM-DEV service worker — เปลี่ยน VERSION ทุกครั้งที่อยากล้างแคชเก่า
-const VERSION = "v3";
+const VERSION = "v4";
 const CACHE = `iasrom-${VERSION}`;
 const PRECACHE = ["/", "/logo-mark.png", "/logo-mark-white.png", "/icons/icon-192.png"];
 

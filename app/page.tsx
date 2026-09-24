@@ -8,6 +8,8 @@ import SkillMatrix from "./components/SkillMatrix";
 import ProjectGallery from "./components/ProjectGallery";
 import TeamSection from "./components/TeamSection";
 import ContactSection from "./components/ContactSection";
+import ClientTools from "./components/ClientTools";
+import ReviewsSection from "./components/ReviewsSection";
 import ChatAssistant from "./components/ChatAssistant";
 import ScrollReveal from "./components/ScrollReveal";
 import { LINE_OA_URL } from "./data/portfolio";
@@ -144,6 +146,8 @@ function HomeContent() {
     <CodeZoomExperience />
     <SkillMatrix />
     <ProjectGallery />
+    <ClientTools />
+    <ReviewsSection />
     <TeamSection />
     <ContactSection />
     <footer className="site-footer">Copyright © {new Date().getFullYear()} IASROM-DEV {t("สงวนลิขสิทธิ์ทุกประการ", "All rights reserved.")}</footer>

@@ -6,6 +6,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { env } from "./ai";
 import { listAdmins } from "./concierge";
 import { bubble, C, flex, push, SITE, text, uriButton, type LineMessage } from "./line";
+import { inviteReview } from "./reviews";
 import { store } from "./store";
 
 const SECRET_KEY = env("OMISE_SECRET_KEY");
@@ -35,6 +36,8 @@ export type Invoice = {
   paidAt?: number;
   checkedAt?: number;
   testMode: boolean;
+  quoteId?: string;          // บิลมัดจำที่สร้างจากใบเสนอราคา
+  inviteReview?: boolean;    // false = ไม่ต้องชวนรีวิวหลังจ่าย (เช่น บิลมัดจำ ยังไม่ได้เริ่มงาน)
 };
 
 const COL = "pay_invoices";
@@ -85,7 +88,7 @@ export const listInvoices = async () => (await store.list<Invoice>(COL)).sort((a
 const saveInvoice = (inv: Invoice) => store.set(COL, inv.id, inv);
 export const payUrl = (inv: Pick<Invoice, "id">) => `${SITE}/pay/${inv.id}`;
 
-export async function createInvoice(opts: { userId: string; name: string; amount: string; description: string; createdBy: string }) {
+export async function createInvoice(opts: { userId: string; name: string; amount: string; description: string; createdBy: string; quoteId?: string; inviteReview?: boolean }) {
   const amount = parseAmount(opts.amount);
   if (amount === null) throw new Error("ยอดเงินไม่ถูกต้อง (ใส่ตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง)");
   if (amount < MIN_SATANG || amount > MAX_SATANG) throw new Error(`ยอดต้องอยู่ระหว่าง ฿${formatSatang(MIN_SATANG)} – ฿${formatSatang(MAX_SATANG)}`);
@@ -113,9 +116,11 @@ export async function createInvoice(opts: { userId: string; name: string; amount
   const inv: Invoice = {
     id, userId: opts.userId, name: opts.name, amount, description, chargeId: charge.id, qrUri,
     status: "pending", createdBy: opts.createdBy, createdAt: Date.now(), expiresAt, testMode: !charge.livemode,
+    ...(opts.quoteId ? { quoteId: opts.quoteId } : {}), ...(opts.inviteReview === false ? { inviteReview: false } : {}),
   };
   await saveInvoice(inv);
-  await push(inv.userId, [invoiceCard(inv)]);
+  // ส่งไลน์ไม่สำเร็จก็ยังเก็บบิลไว้ (ทีมเปิด/ส่งลิงก์ให้ลูกค้าเองจากหลังบ้านได้)
+  await push(inv.userId, [invoiceCard(inv)]).catch((err) => console.error("invoice push failed", err));
   return inv;
 }
 
@@ -230,6 +235,7 @@ export function receiptCard(inv: Invoice): LineMessage {
 
 async function notifyPaid(inv: Invoice) {
   await push(inv.userId, [receiptCard(inv)]);
+  if (inv.inviteReview !== false) await inviteReview(inv.userId, `inv:${inv.id}`, inv.description, inv.name).catch(() => null);
   const admins = await listAdmins();
   await Promise.all(admins.map((a) => push(a.userId, [{
     type: "text",

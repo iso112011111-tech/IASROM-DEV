@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { BookingsPanel, JobsPanel, QuotesPanel, ReviewsPanel, type Booking, type Job, type Quote, type Review } from "./AdminPro";
 
 type Est = { min: number; max: number; items: string[] } | null;
 type Msg = { role: "user" | "assistant"; content: string };
@@ -23,14 +24,22 @@ type Data = {
   admins: { name: string; addedAt: number }[];
   pricing: PriceItem[]; customers: Customer[]; tickets: Ticket[];
   payments: { configured: boolean; testMode: boolean }; invoices: Invoice[];
-  stats: { customers: number; today: number; openTickets: number; humanHandled: number; paidMonth: number; pipeline: { min: number; max: number } };
+  quotes: Quote[]; jobs: Job[]; bookings: Booking[]; reviews: Review[]; services: { id: string; name: string; icon: string }[]; calendarUrl: string;
+  stats: {
+    customers: number; today: number; openTickets: number; humanHandled: number; paidMonth: number; pipeline: { min: number; max: number };
+    pendingBookings: number; pendingReviews: number; activeJobs: number;
+  };
 };
 
 const TABS = [
   { id: "overview", label: "ภาพรวม", icon: "◎" },
   { id: "tickets", label: "เรื่องรอทีม", icon: "🎫" },
   { id: "customers", label: "ลูกค้า", icon: "👥" },
+  { id: "quotes", label: "ใบเสนอราคา", icon: "📄" },
+  { id: "jobs", label: "งาน/ซ่อม", icon: "📦" },
+  { id: "bookings", label: "คิวนัด", icon: "📅" },
   { id: "billing", label: "บิล / QR", icon: "🧾" },
+  { id: "reviews", label: "รีวิว", icon: "⭐" },
   { id: "pricing", label: "ราคา", icon: "💰" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
@@ -77,6 +86,7 @@ export default function AdminApp({ me }: { me: string }) {
   useEffect(() => { if (toast) { const t = setTimeout(() => setToast(""), 2500); return () => clearTimeout(t); } }, [toast]);
 
   const act = async (body: Record<string, unknown>, done: string) => {
+    if (body.type === "noop") { setToast(done); await load(); return; } // แค่แจ้งผล + โหลดข้อมูลใหม่ (งานที่ยิง API เองแล้ว)
     setBusy(JSON.stringify(body));
     const res = await fetch("/api/admin/action", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = await res.json().catch(() => ({}));
@@ -117,6 +127,8 @@ export default function AdminApp({ me }: { me: string }) {
         {TABS.map((t) => <button key={t.id} className={tab === t.id ? "on" : ""} onClick={() => setTab(t.id)}>
           <span aria-hidden="true">{t.icon}</span>{t.label}
           {t.id === "tickets" && stats.openTickets > 0 && <i className="adm-badge">{stats.openTickets}</i>}
+          {t.id === "bookings" && stats.pendingBookings > 0 && <i className="adm-badge">{stats.pendingBookings}</i>}
+          {t.id === "reviews" && stats.pendingReviews > 0 && <i className="adm-badge">{stats.pendingReviews}</i>}
         </button>)}
       </nav>
       <div className="adm-me">
@@ -135,6 +147,8 @@ export default function AdminApp({ me }: { me: string }) {
           <Stat label="ลูกค้าทั้งหมด" value={stats.customers} sub={`วันนี้ ${stats.today} คน`} />
           <Stat label="เรื่องรอทีม" value={stats.openTickets} sub="ยังไม่มีใครรับ" tone={stats.openTickets ? "warn" : undefined} onClick={() => setTab("tickets")} />
           <Stat label="ทีมกำลังดูแล" value={stats.humanHandled} sub="AI เงียบกับคนเหล่านี้" />
+          <Stat label="งานที่กำลังทำ" value={stats.activeJobs} sub="โปรเจกต์ + งานซ่อม" onClick={() => setTab("jobs")} />
+          <Stat label="คิวรอยืนยัน" value={stats.pendingBookings} sub="จองผ่านเว็บ/ไลน์" tone={stats.pendingBookings ? "warn" : undefined} onClick={() => setTab("bookings")} />
           <Stat label="รับชำระแล้ว (30 วัน)" value={satang(stats.paidMonth)} sub="ผ่าน PromptPay QR" small onClick={() => setTab("billing")} />
           <Stat label="มูลค่างานประเมิน" value={stats.pipeline.max ? `${baht(stats.pipeline.min)}–${baht(stats.pipeline.max)}` : "—"} sub="เรื่องที่ยังไม่ปิด" small />
         </div>
@@ -211,13 +225,18 @@ export default function AdminApp({ me }: { me: string }) {
                 : <p className="adm-muted">ยังไม่มีบทสนทนากับ AI{open.lastText ? ` — ข้อความล่าสุด: "${open.lastText}"` : ""}</p>}
             </div>
             <div className="adm-actions">
-              <button className="adm-primary" onClick={() => { setBillFor(open.userId); setTab("billing"); }}>🧾 ออกบิล QR</button>
+              <button className="adm-primary" onClick={() => { setBillFor(open.userId); setTab("quotes"); }}>📄 ใบเสนอราคา</button>
+              <button className="adm-ghost" onClick={() => { setBillFor(open.userId); setTab("billing"); }}>🧾 ออกบิล QR</button>
               <a className="adm-ghost" href="https://chat.line.biz/" target="_blank" rel="noopener noreferrer">เปิดแชตใน LINE OA ↗</a>
             </div>
           </> : <p className="adm-empty">เลือกลูกค้าทางซ้ายเพื่อดูรายละเอียด</p>}
         </div>
       </div>}
 
+      {tab === "quotes" && <QuotesPanel quotes={data.quotes} customers={data.customers} busy={Boolean(busy)} act={act} preset={billFor} />}
+      {tab === "jobs" && <JobsPanel jobs={data.jobs} customers={data.customers} busy={Boolean(busy)} act={act} />}
+      {tab === "bookings" && <BookingsPanel bookings={data.bookings} services={data.services} calendarUrl={data.calendarUrl} busy={Boolean(busy)} act={act} />}
+      {tab === "reviews" && <ReviewsPanel reviews={data.reviews} busy={Boolean(busy)} act={act} />}
       {tab === "billing" && <Billing data={data} busy={Boolean(busy)} preset={billFor} act={act} />}
 
       {tab === "pricing" && <PricingEditor items={data.pricing} busy={Boolean(busy)} onSave={(items) => act({ type: "savePricing", items }, "บันทึกราคาแล้ว — AI ใช้ราคาใหม่ทันที")} onReset={() => act({ type: "resetPricing" }, "คืนค่าราคาเริ่มต้นแล้ว")} />}

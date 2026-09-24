@@ -77,10 +77,20 @@ async function fsCreate(col: string, id: string, value: unknown) {
 }
 
 async function fsList<T>(col: string): Promise<T[]> {
-  const res = await fetch(`${docsUrl()}/${col}?pageSize=100`, { headers: { Authorization: `Bearer ${await googleToken()}` } });
-  if (!res.ok) throw new Error(`Firestore list ${col} → ${res.status}`);
-  const data = await res.json();
-  return (data.documents ?? []).map((d: { fields?: { data?: { stringValue?: string } } }) => JSON.parse(d.fields?.data?.stringValue ?? "null")).filter(Boolean);
+  const out: T[] = [];
+  let pageToken = "";
+  for (let page = 0; page < 10; page++) { // สูงสุด 3,000 เอกสารต่อคอลเลกชัน
+    const res = await fetch(`${docsUrl()}/${col}?pageSize=300${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`, { headers: { Authorization: `Bearer ${await googleToken()}` } });
+    if (!res.ok) throw new Error(`Firestore list ${col} → ${res.status}`);
+    const data = await res.json();
+    for (const d of (data.documents ?? []) as { fields?: { data?: { stringValue?: string } } }[]) {
+      const v = JSON.parse(d.fields?.data?.stringValue ?? "null");
+      if (v) out.push(v);
+    }
+    if (!data.nextPageToken) break;
+    pageToken = data.nextPageToken;
+  }
+  return out;
 }
 
 async function fsDelete(col: string, id: string) {

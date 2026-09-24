@@ -9,8 +9,11 @@ import {
 } from "../../lib/concierge";
 import {
   askAiMessage, contactMessage, lineConfigured, linksMessage, parseAiForLine, profileName, projectsCarousel, push, quickReply,
-  repairMessage, reply, showLoading, startProjectMessage, validSignature, welcomeMessage, type LineMessage,
+  repairMessage, reply, showLoading, SITE, startProjectMessage, studioMessage, validSignature, welcomeMessage, type LineMessage,
 } from "../../lib/line";
+import { bookInviteCard } from "../../lib/bookings";
+import { signLink } from "../../lib/ids";
+import { customerJobsCard } from "../../lib/jobs";
 import { estimate } from "../../data/pricing";
 import { getPricing } from "../../lib/pricingStore";
 import { PROJECTS } from "../../data/portfolio";
@@ -43,6 +46,17 @@ function menuReply(text: string): LineMessage[] | null {
     return [say("ตัวอย่างผลงานของทีมครับ 👇 เลื่อนดูได้เลย แตะการ์ดเพื่อดูรายละเอียดบนเว็บ", false), ...(carousel ? [{ ...carousel, quickReply: quickReply() }] : [])];
   }
   if (["สวัสดี", "หวัดดี", "hello", "hi", "เมนู", "menu"].includes(t)) return [welcomeMessage()];
+  return null;
+}
+
+/** เครื่องมือที่ต้องรู้ว่าเป็นลูกค้าคนไหน (ลิงก์จองผูกไลน์ / รายการงานของลูกค้า) */
+async function toolReply(text: string, c: Customer): Promise<LineMessage[] | null> {
+  const t = text.trim().toLowerCase();
+  if (/^(จองคิว|นัดคิว|จองนัด|book(ing)?)$/.test(t)) {
+    return [{ ...bookInviteCard(`${SITE}/book?u=${signLink({ u: c.userId, name: c.name }, 7)}`), quickReply: quickReply() }];
+  }
+  if (/^(ติดตามงาน|สถานะงาน|งานของฉัน|เช็คงาน|เช็กงาน|track)$/.test(t)) return [{ ...(await customerJobsCard(c.userId)), quickReply: quickReply() }];
+  if (/^(ออกแบบเว็บ|ai studio|studio|ออกแบบเว็บไซต์)$/.test(t)) return [studioMessage()];
   return null;
 }
 
@@ -99,7 +113,7 @@ async function handleCustomerText(event: LineEvent, c: Customer, text: string) {
   // ทีมดูแลลูกค้าคนนี้อยู่ หรือทีมหยุด AI ทั้งหมด → AI เงียบ ให้ทีมตอบเองในหน้าแชตของ LINE OA
   if (c.mode === "human" || (await getConfig()).aiPaused) { await saveCustomer(c); return; }
 
-  const quick = menuReply(text);
+  const quick = menuReply(text) ?? (await toolReply(text, c));
   if (quick) return reply(event.replyToken!, quick);
   if (/^(คุยกับคน|คุยกับทีม|ขอคุยกับเจ้าหน้าที่|talk to (a )?human)/i.test(text.trim())) return startHandoff(event, c, "ลูกค้าขอคุยกับทีม");
 

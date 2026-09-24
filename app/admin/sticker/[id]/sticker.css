@@ -1,0 +1,16 @@
+.stk-page { min-height: 100dvh; padding: 24px; background: #eef3f1; font-family: 'Noto Sans Thai', 'DM Sans', sans-serif; color: #17211e; }
+.stk-tools { display: flex; gap: 14px; align-items: center; margin-bottom: 18px; font-size: 13px; color: #5f716b; }
+.stk-tools button { height: 42px; padding: 0 18px; border: 0; border-radius: 12px; background: #17211e; color: #fff; font: 700 14px 'Noto Sans Thai', sans-serif; cursor: pointer; }
+.stk-sheet { display: flex; flex-wrap: wrap; gap: 4mm; }
+.stk { width: 60mm; height: 30mm; box-sizing: border-box; display: flex; gap: 2.5mm; align-items: center; padding: 2mm; background: #fff; border: 0.3mm dashed #b9c7c2; border-radius: 2mm; }
+.stk img { width: 25mm; height: 25mm; flex: none; }
+.stk div { display: grid; gap: 0.6mm; min-width: 0; line-height: 1.15; }
+.stk b { font: 800 2.6mm 'DM Sans', sans-serif; letter-spacing: .08em; color: #16795c; }
+.stk strong { font: 800 3.4mm 'DM Sans', sans-serif; }
+.stk span { font-size: 2.6mm; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.stk small { font-size: 2.1mm; color: #5f716b; }
+@media print {
+  .stk-page { padding: 0; background: #fff; }
+  .stk-tools { display: none; }
+  @page { margin: 8mm; }
+}

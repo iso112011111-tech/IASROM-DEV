@@ -77,7 +77,7 @@
 .adm-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .adm-actions { display: flex; gap: 8px; }
 
-.adm-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+.adm-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin-bottom: 16px; }
 .adm-stat { display: flex; flex-direction: column; gap: 4px; text-align: left; color: inherit; font: inherit; }
 button.adm-stat { cursor: pointer; }
 .adm-stat small { color: var(--pf-sub); font-size: 12.5px; font-weight: 600; }
@@ -174,3 +174,56 @@ button.adm-stat { cursor: pointer; }
 .adm-pill.bad { background: #fde8e8; color: #9b1c1c; }
 @media (max-width: 560px) { .adm-inv { flex-direction: column; align-items: stretch; } .adm-inv-side { justify-content: flex-start; } }
 .adm-bill .adm-alert { margin: 0; justify-self: stretch; text-align: left; }
+
+/* ---- ฟอร์มทั่วไป / ใบเสนอราคา / งาน / คิว / รีวิว */
+.adm-primary.sm { height: 30px; padding: 0 12px; font-size: 12.5px; }
+.adm-ghost.danger { color: #b42318; }
+.adm-form { display: grid; gap: 12px; border: 0; margin: 12px 0; padding: 0; min-width: 0; }
+.adm-form label, .adm-newrow { display: grid; gap: 6px; font-weight: 700; font-size: 13px; }
+.adm-form input, .adm-form select, .adm-form textarea, .adm-newrow select, .adm-lines input {
+  min-height: 40px; padding: 8px 12px; border: 1px solid var(--pf-border); border-radius: 11px; background: var(--pf-card); color: var(--pf-text); font: 500 14px 'Noto Sans Thai', 'DM Sans', sans-serif; width: 100%; min-width: 0; }
+.adm-form textarea { resize: vertical; }
+.adm-form fieldset:disabled input, .adm-form:disabled input, .adm-form:disabled textarea { opacity: .75; }
+.adm-lines input[aria-invalid="true"] { border-color: #d64545; }
+.adm-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.adm-3col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.adm-newrow { grid-template-columns: 1fr auto; align-items: center; margin: 4px 0 12px; }
+.adm-lines { display: grid; gap: 8px; }
+.adm-line { display: grid; grid-template-columns: 1fr 70px 130px 34px; gap: 8px; align-items: start; }
+.adm-line.head { font-size: 12px; color: var(--pf-sub); font-weight: 600; }
+.adm-line > span { display: grid; gap: 4px; }
+.adm-line input.sub { min-height: 32px; font-size: 12.5px; color: var(--pf-sub); }
+.adm-quote-total { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border-radius: 14px; background: color-mix(in srgb, #2bb98c 12%, transparent); margin: 6px 0 12px; }
+.adm-quote-total b { font: 800 24px 'DM Sans', sans-serif; color: var(--pf-accent); }
+.adm-quote-total small { color: var(--pf-sub); }
+.adm-new { margin: 6px 0 12px; padding: 10px 14px; border: 1px dashed var(--pf-border); border-radius: 14px; }
+.adm-new summary { cursor: pointer; font-weight: 700; color: var(--pf-accent); }
+.adm-mini-bar { display: block; width: 70px; height: 5px; border-radius: 3px; background: var(--pf-border); overflow: hidden; }
+.adm-mini-bar i { display: block; height: 100%; background: #2bb98c; border-radius: 3px; }
+.adm-stages { list-style: none; margin: 14px 0 6px; padding: 0; display: flex; gap: 6px; flex-wrap: wrap; }
+.adm-stages button { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px 0 6px; border-radius: 99px; border: 1px solid var(--pf-border); background: var(--pf-card); color: var(--pf-sub); font: 600 13px 'Noto Sans Thai', sans-serif; cursor: pointer; }
+.adm-stages i { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--pf-border); font-style: normal; font-size: 12px; }
+.adm-stages .done { color: var(--pf-accent); border-color: color-mix(in srgb, #2bb98c 45%, var(--pf-border)); }
+.adm-stages .done i { background: #2bb98c; color: #fff; }
+.adm-stages .now { color: var(--pf-text); border-color: #2bb98c; box-shadow: 0 0 0 3px color-mix(in srgb, #2bb98c 20%, transparent); }
+.adm-stages .now i { background: var(--pf-text); color: var(--pf-card); }
+.adm-day h3 { margin: 16px 0 8px; font-size: 14px; color: var(--pf-sub); }
+.adm-booking { display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; padding: 12px; border-radius: 14px; border: 1px solid var(--pf-border); margin-bottom: 8px; }
+.adm-booking .t { font: 800 16px 'DM Sans', sans-serif; }
+.adm-booking.canceled, .adm-booking.done { opacity: .55; }
+.adm-booking a { color: inherit; }
+.adm-copy { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+.adm-copy code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 10px; border-radius: 10px; background: var(--pf-alt); font-size: 12px; }
+.adm-reviews { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 12px; }
+.adm-review { display: grid; gap: 8px; padding: 16px; border-radius: 16px; border: 1px solid var(--pf-border); }
+.adm-review.on { border-color: #2bb98c; background: color-mix(in srgb, #2bb98c 6%, transparent); }
+.adm-review .stars { color: #f5b50a; letter-spacing: 1px; }
+.adm-review .stars span { color: var(--pf-border); }
+.adm-review p { margin: 0; line-height: 1.6; }
+.adm-review footer { display: flex; gap: 6px; }
+@media (max-width: 560px) {
+  .adm-2col, .adm-3col { grid-template-columns: 1fr; }
+  .adm-line { grid-template-columns: 1fr 56px 96px 30px; }
+  .adm-booking { grid-template-columns: 48px 1fr; }
+  .adm-booking .adm-inv-side { grid-column: 1 / -1; justify-content: flex-start; }
+}

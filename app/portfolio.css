@@ -1260,3 +1260,55 @@ a.ct-channel:hover { border-color: var(--pf-accent-2); transform: translateY(-2p
   .sk-fill { transform: none; }
   .pj-card { transform: none; }
 }
+
+/* ================================================================ เครื่องมือสำหรับลูกค้า */
+.ctool-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; max-width: 1180px; margin: 0 auto; }
+.ctool-card { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 26px; border-radius: 26px; background: var(--pf-card); border: 1px solid var(--pf-border); box-shadow: var(--pf-shadow); color: var(--pf-text); text-decoration: none; overflow: hidden; transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+.ctool-card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--pf-accent-2) 55%, transparent); box-shadow: 0 24px 50px rgba(18, 60, 48, .14); }
+.ctool-card h3 { margin: 0; font-size: 19px; }
+.ctool-card p { margin: 0; color: var(--pf-sub); font-size: 14.5px; line-height: 1.65; flex: 1; }
+.ctool-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: var(--pf-soft); font-size: 26px; }
+.ctool-cta { font-weight: 700; color: var(--pf-accent); font-size: 14.5px; }
+.ctool-card:hover .ctool-cta { text-decoration: underline; text-underline-offset: 4px; }
+.ctool-ai { grid-column: span 3; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: center; padding: 34px; color: #eaf7f2;
+  background: radial-gradient(600px 300px at 90% 10%, rgba(99, 132, 255, .35), transparent 60%), radial-gradient(500px 300px at 0% 100%, rgba(63, 207, 159, .35), transparent 60%), #0f1a17; border-color: #22342f; }
+.ctool-ai .ctool-copy { display: grid; gap: 12px; }
+.ctool-ai h3 { font-size: clamp(24px, 3vw, 34px); line-height: 1.25; }
+.ctool-ai p { color: #b7cbc4; font-size: 15.5px; }
+.ctool-ai .ctool-cta { display: inline-flex; justify-self: start; padding: 12px 20px; border-radius: 14px; background: linear-gradient(135deg, #3fcf9f, #3b6cf6); color: #fff; box-shadow: 0 12px 28px rgba(59, 108, 246, .3); }
+.ctool-badge { justify-self: start; padding: 6px 12px; border-radius: 99px; background: rgba(255, 255, 255, .1); color: #a8f0d4; font: 700 12px 'DM Sans', sans-serif; letter-spacing: .08em; }
+.ctool-mini { position: relative; aspect-ratio: 16 / 10; border-radius: 16px; background: #fdfbf7; overflow: hidden; box-shadow: 0 30px 60px rgba(0, 0, 0, .45); transform: perspective(900px) rotateY(-10deg) rotateX(4deg); transition: transform .5s ease; }
+.ctool-ai:hover .ctool-mini { transform: perspective(900px) rotateY(0) rotateX(0); }
+.ctool-mini-bar { display: flex; gap: 5px; padding: 8px 10px; background: #eef0ef; }
+.ctool-mini-bar i { width: 8px; height: 8px; border-radius: 50%; background: #ff5f57; } .ctool-mini-bar i:nth-child(2) { background: #febc2e; } .ctool-mini-bar i:nth-child(3) { background: #28c840; }
+.ctool-mini-hero { position: relative; display: grid; gap: 7px; padding: 8% 7% 5%; }
+.ctool-mini-hero b { height: 12px; border-radius: 6px; background: #3a2a22; width: 48%; animation: ctType 3.2s ease infinite; }
+.ctool-mini-hero b:nth-child(2) { width: 36%; animation-delay: .25s; }
+.ctool-mini-hero span { width: 22%; height: 18px; margin-top: 6px; border-radius: 99px; background: #7a4b3a; }
+.ctool-mini-hero em { position: absolute; right: 9%; top: 14%; display: grid; place-items: center; width: 24%; aspect-ratio: 1; border-radius: 44% 56% 52% 48%; background: linear-gradient(135deg, #7a4b3a, #d4a373); font-size: clamp(22px, 3vw, 40px); font-style: normal; animation: mkFloat 4s ease-in-out infinite; }
+.ctool-mini-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0 7%; }
+.ctool-mini-cards i { aspect-ratio: 4 / 3; border-radius: 8px; background: #efe7df; }
+.ctool-mini-scan { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 0%, rgba(63, 207, 159, .28) 48%, transparent 52%); background-size: 100% 220%; animation: ctScan 3.2s linear infinite; }
+@keyframes ctScan { from { background-position: 0 120%; } to { background-position: 0 -120%; } }
+@keyframes ctType { 0% { clip-path: inset(0 100% 0 0); } 40%, 100% { clip-path: inset(0 0 0 0); } }
+@keyframes mkFloat { 50% { transform: translateY(-6px); } }
+.ctool-demo { margin: 22px auto 0; text-align: center; color: var(--pf-sub); font-size: 14px; }
+.ctool-demo a { color: var(--pf-accent); font-weight: 700; }
+@media (max-width: 960px) { .ctool-grid { grid-template-columns: 1fr 1fr; } .ctool-ai { grid-column: span 2; } }
+@media (max-width: 640px) { .ctool-grid { grid-template-columns: 1fr; } .ctool-ai { grid-column: auto; grid-template-columns: 1fr; padding: 24px; } }
+
+/* ================================================================ รีวิวจริง + สถิติ */
+.rvw-stats { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; max-width: 1000px; margin: 0 auto 26px; }
+.rvw-stats div { display: grid; min-width: 170px; padding: 16px 22px; border-radius: 20px; background: var(--pf-card); border: 1px solid var(--pf-border); text-align: center; }
+.rvw-stats b { font: 800 30px 'DM Sans', sans-serif; color: var(--pf-accent); }
+.rvw-stats span { color: var(--pf-sub); font-size: 13.5px; }
+.rvw-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; max-width: 1180px; margin: 0 auto; }
+.rvw-card { margin: 0; padding: 24px; border-radius: 24px; background: var(--pf-card); border: 1px solid var(--pf-border); box-shadow: var(--pf-shadow); display: grid; gap: 12px; align-content: start; }
+.rvw-stars { color: #f5b50a; font-size: 18px; letter-spacing: 2px; }
+.rvw-stars span { color: var(--pf-border); }
+.rvw-card blockquote { margin: 0; font-size: 15.5px; line-height: 1.7; }
+.rvw-card figcaption { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.rvw-card figcaption small { flex-basis: 100%; color: var(--pf-sub); font-size: 12.5px; }
+.rvw-verified { padding: 3px 9px; border-radius: 99px; background: var(--pf-soft); color: var(--pf-accent); font-size: 11.5px; font-weight: 700; }
+@media (max-width: 960px) { .rvw-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) { .rvw-grid { grid-template-columns: 1fr; } }

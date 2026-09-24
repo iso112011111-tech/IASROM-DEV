@@ -67,6 +67,9 @@ type QR = { label: string; text: string };
 const QUICK_DEFAULT: QR[] = [
   { label: "🗂 ดูผลงาน", text: "ดูผลงาน" },
   { label: "🚀 เริ่มโปรเจกต์", text: "เริ่มโปรเจกต์" },
+  { label: "✨ ออกแบบเว็บ (AI)", text: "ออกแบบเว็บ" },
+  { label: "📅 จองคิว", text: "จองคิว" },
+  { label: "📦 ติดตามงาน", text: "ติดตามงาน" },
   { label: "🛠 แจ้งซ่อม", text: "แจ้งซ่อม" },
   { label: "👥 ติดต่อทีม", text: "ติดต่อทีม" },
 ];
@@ -277,4 +280,29 @@ export function parseAiForLine(raw: string, lang: "th" | "en") {
     .trim();
   const unique = links.filter((l, i) => links.findIndex((x) => x.uri === l.uri) === i);
   return { text: clean, cards: cards.slice(0, 3), links: unique };
+}
+
+/** การ์ดชวนลอง AI Studio (ตอบคำว่า "ออกแบบเว็บ") */
+export function studioMessage() {
+  return flex("ให้ AI ออกแบบเว็บของคุณฟรี", bubble({
+    header: {
+      type: "box", layout: "vertical", paddingAll: "20px", spacing: "xs",
+      background: { type: "linearGradient", angle: "135deg", startColor: "#0f1a17", endColor: "#2b4fb8" },
+      contents: [
+        { type: "text", text: "✨ AI STUDIO · ฟรี", size: "xxs", color: "#a8f0d4", weight: "bold" },
+        { type: "text", text: "เห็นเว็บของคุณ ก่อนจ่ายสักบาท", size: "lg", color: "#ffffff", weight: "bold", wrap: true },
+      ],
+    },
+    body: {
+      type: "box", layout: "vertical", spacing: "sm", paddingAll: "20px", contents: [
+        listRow("1️⃣", "เล่าธุรกิจสั้นๆ เช่น ร้านกาแฟ / คลินิก / อู่ซ่อมรถ"),
+        listRow("2️⃣", "AI ออกแบบหน้าแรกให้ดูใน ~15 วินาที"),
+        listRow("3️⃣", "ชอบแบบไหน กดส่งให้ทีมทำจริงได้ทันที"),
+      ],
+    },
+    footer: { type: "box", layout: "vertical", spacing: "sm", paddingAll: "16px", contents: [
+      uriButton("เริ่มออกแบบเลย", `${SITE}/studio`, true),
+      uriButton("ดูตัวอย่างร้านกาแฟ", `${SITE}/studio/U4XvTTJ0wS57u-gtxO4rBg`),
+    ] },
+  }), quickReply());
 }

@@ -122,11 +122,15 @@ export async function callModel(messages: { role: string; content: string }[], o
 
 /** ถาม AI แล้วรอคำตอบเต็ม (ใช้กับ LINE) — เรียกแบบ streaming แล้วรวมข้อความเอง
  *  (บน Vercel การเรียกแบบไม่ stream กับผู้ให้บริการนี้ค้างได้ ส่วนแบบ stream เริ่มส่งข้อมูลเร็วและเสถียรกว่า) */
-export async function askOnce(history: ChatMessage[], lang: "th" | "en", extra = ""): Promise<string | "budget" | null> {
+export const askOnce = (history: ChatMessage[], lang: "th" | "en", extra = "") =>
+  complete([{ role: "system", content: systemPrompt(lang, extra) }, ...history]);
+
+/** เรียก AI ด้วยข้อความที่กำหนดเอง แล้วรวมคำตอบแบบ stream เป็นข้อความเดียว */
+export async function complete(messages: { role: string; content: string }[], timeoutMs = 50_000): Promise<string | "budget" | null> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 50_000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await callModel([{ role: "system", content: systemPrompt(lang, extra) }, ...history], { stream: true, signal: controller.signal });
+    const res = await callModel(messages, { stream: true, signal: controller.signal });
     if (!res || res === "budget") return res;
     const reader = res.body!.getReader();
     const decoder = new TextDecoder();
