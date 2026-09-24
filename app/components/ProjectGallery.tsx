@@ -61,6 +61,12 @@ export default function ProjectGallery() {
     const onOpen = (e: Event) => { const id = (e as CustomEvent<string>).detail; if (RAW_PROJECTS.some((p) => p.id === id)) setOpenId(id); };
     window.addEventListener("pf-filter", onFilter);
     window.addEventListener("pf-open", onOpen);
+    // เปิดรายละเอียดผลงานจากลิงก์ ?project=<id> (เช่น การ์ดผลงานใน LINE OA)
+    const fromUrl = new URLSearchParams(window.location.search).get("project");
+    if (fromUrl && RAW_PROJECTS.some((p) => p.id === fromUrl)) {
+      setOpenId(fromUrl);
+      document.getElementById("projects")?.scrollIntoView();
+    }
     return () => { window.removeEventListener("pf-filter", onFilter); window.removeEventListener("pf-open", onOpen); };
   }, []);
 
