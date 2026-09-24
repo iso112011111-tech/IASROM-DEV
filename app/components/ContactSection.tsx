@@ -18,7 +18,7 @@ const ICON = {
 function lineUrl(id: string) {
   const clean = id.trim().replace(/^~/, "");
   return clean.startsWith("@")
-    ? `https://line.me/R/ti/p/${encodeURIComponent(clean)}`
+    ? `https://line.me/R/ti/p/@${encodeURIComponent(clean.slice(1))}`
     : `https://line.me/ti/p/~${encodeURIComponent(clean)}`;
 }
 

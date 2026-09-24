@@ -259,7 +259,7 @@ export const TEAM: TeamMember[] = [
 export const CONTACT: { phone?: string; email?: string; line?: string; hours?: string } = {
   phone: "",
   email: "",
-  line: "",
+  line: "@891dpcst", // LINE OA ของทีม
   hours: "",
 };
 
