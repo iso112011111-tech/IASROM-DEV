@@ -3,8 +3,9 @@
 import { after, NextResponse } from "next/server";
 import { askOnce, env, takeKey, type ChatMessage } from "../../lib/ai";
 import {
-  acceptedAdminCard, addAdmin, conciergeAddendum, estimateCard, getTicket, handoff, HUMAN_HOURS, isAdmin, listAdmins,
-  loadCustomer, parseConciergeTags, saveCustomer, saveTicket, waitingCard, type Customer,
+  acceptedAdminCard, addAdmin, adminQuick, conciergeAddendum, customerListCard, estimateCard, getConfig, getTicket, handoff,
+  HUMAN_HOURS, isAdmin, listAdmins, loadCustomer, muteCustomer, parseConciergeTags, recentCustomers, saveCustomer, saveTicket,
+  setConfig, unmuteCustomer, waitingCard, type Customer,
 } from "../../lib/concierge";
 import {
   askAiMessage, contactMessage, lineConfigured, linksMessage, parseAiForLine, profileName, projectsCarousel, push, quickReply,
@@ -52,14 +53,33 @@ async function adminCommand(userId: string, text: string): Promise<LineMessage[]
     if (!ADMIN_CODE || arg !== ADMIN_CODE) return [say("รหัสไม่ถูกต้องครับ", false)];
     const name = await profileName(userId);
     await addAdmin({ userId, name, addedAt: Date.now() });
-    return [say(`✅ ลงทะเบียน ${name} เป็นทีมแล้ว\nเมื่อลูกค้าขอคุยกับทีม จะมีการ์ดแจ้งเตือนส่งมาที่แชตนี้ พร้อมปุ่ม "รับเรื่อง"\n\nพิมพ์ /team เพื่อดูรายชื่อทีม`, false)];
+    return [{ type: "text", text: `✅ ลงทะเบียน ${name} เป็นทีมแล้ว\n• ลูกค้าขอคุยกับทีม → การ์ดแจ้งเตือนพร้อมปุ่ม "รับเรื่อง" มาที่แชตนี้\n• จะเข้าไปตอบลูกค้าเอง → กด "👥 ลูกค้าล่าสุด" แล้ว "หยุด AI" คนนั้นก่อน\n• ทีมว่างตอบเองทั้งหมด → กด "⏸ หยุด AI ทั้งหมด"`, quickReply: adminQuick() }];
   }
   if (!cmd.startsWith("/") || !(await isAdmin(userId))) return null;
+  const toAdmin = (t: string): LineMessage => ({ type: "text", text: t, quickReply: adminQuick() });
+
   if (cmd === "/team") {
     const admins = await listAdmins();
-    return [say(`ทีมที่รับแจ้งเตือน (${admins.length} คน)\n${admins.map((a) => `• ${a.name}`).join("\n")}`, false)];
+    return [toAdmin(`ทีมที่รับแจ้งเตือน (${admins.length} คน)\n${admins.map((a) => `• ${a.name}`).join("\n")}`)];
   }
-  return [say("คำสั่งทีม:\n/team — ดูรายชื่อทีมที่รับแจ้งเตือน\n\nรับเรื่อง / คืนให้ AI ใช้ปุ่มบนการ์ดแจ้งเตือนได้เลย", false)];
+  if (["/หยุด", "/pause", "/off"].includes(cmd)) {
+    await setConfig({ aiPaused: true, pausedBy: await profileName(userId), pausedAt: Date.now() });
+    return [toAdmin("⏸ หยุด AI แล้ว — AI จะไม่ตอบลูกค้าคนไหนเลย ทีมตอบเองในหน้าแชต LINE OA ได้เต็มที่\nกด \"▶️ เปิด AI\" เมื่อจะให้ AI กลับมาดูแล")];
+  }
+  if (["/เปิด", "/resume", "/on"].includes(cmd)) {
+    await setConfig({ aiPaused: false });
+    return [toAdmin("▶️ เปิด AI แล้ว — AI กลับมาตอบลูกค้า (ยกเว้นคนที่ทีมกดหยุด AI ไว้รายคน)")];
+  }
+  if (["/ลูกค้า", "/customers"].includes(cmd)) {
+    const [list, cfg] = await Promise.all([recentCustomers(), getConfig()]);
+    return [customerListCard(list, cfg.aiPaused)];
+  }
+  if (["/สถานะ", "/status"].includes(cmd)) {
+    const [cfg, list] = await Promise.all([getConfig(), recentCustomers(50)]);
+    const handled = list.filter((c) => c.mode === "human");
+    return [toAdmin(`📊 สถานะ\nAI: ${cfg.aiPaused ? `⏸ หยุดทั้งหมด (โดย ${cfg.pausedBy ?? "ทีม"})` : "▶️ เปิดอยู่"}\nทีมกำลังดูแลรายคน: ${handled.length} คน${handled.map((c) => `\n• ${c.name} — ${c.humanBy ?? "ทีม"}`).join("")}`)];
+  }
+  return [toAdmin("คำสั่งทีม (กดปุ่มด้านล่างได้เลย):\n⏸ /หยุด — หยุด AI ทุกคน\n▶️ /เปิด — เปิด AI\n👥 /ลูกค้า — ลูกค้าล่าสุด + หยุด AI รายคน\n📊 /สถานะ — ดูสถานะ\n/team — รายชื่อทีม")];
 }
 
 // ---------------------------------------------------------------- ลูกค้า
@@ -74,8 +94,9 @@ async function startHandoff(event: LineEvent, c: Customer, reason: string, extra
 }
 
 async function handleCustomerText(event: LineEvent, c: Customer, text: string) {
-  // ทีมรับเรื่องอยู่ → AI เงียบ ให้ทีมตอบเองในหน้าแชตของ LINE OA
-  if (c.mode === "human") return;
+  c.lastText = text.slice(0, 120);
+  // ทีมดูแลลูกค้าคนนี้อยู่ หรือทีมหยุด AI ทั้งหมด → AI เงียบ ให้ทีมตอบเองในหน้าแชตของ LINE OA
+  if (c.mode === "human" || (await getConfig()).aiPaused) { await saveCustomer(c); return; }
 
   const quick = menuReply(text);
   if (quick) return reply(event.replyToken!, quick);
@@ -127,6 +148,18 @@ async function handlePostback(event: LineEvent, userId: string, data: string) {
     return startHandoff(event, c, p.get("r") === "estimate" ? "ลูกค้าขอให้ทีมยืนยันราคา" : "ลูกค้าขอคุยกับทีม");
   }
 
+  if (action === "mute" || action === "unmute") {
+    if (!(await isAdmin(userId))) return reply(event.replyToken!, [say("ปุ่มนี้สำหรับทีมเท่านั้นครับ", false)]);
+    const target = p.get("u") ?? "";
+    const c = await loadCustomer(target, async () => "ลูกค้า");
+    if (action === "mute") {
+      await muteCustomer(c, await profileName(userId));
+      return reply(event.replyToken!, [{ type: "text", text: `🤫 หยุด AI สำหรับ ${c.name} แล้ว (${HUMAN_HOURS} ชม.) — เข้าไปตอบในหน้าแชต LINE OA ได้เลย\nhttps://chat.line.biz/`, quickReply: adminQuick() }]);
+    }
+    await unmuteCustomer(c);
+    return reply(event.replyToken!, [{ type: "text", text: `🤖 คืนให้ AI แล้ว — AI กลับมาดูแล ${c.name}`, quickReply: adminQuick() }]);
+  }
+
   if (action === "accept" || action === "release") {
     if (!(await isAdmin(userId))) return reply(event.replyToken!, [say("ปุ่มนี้สำหรับทีมเท่านั้นครับ", false)]);
     const ticket = await getTicket(p.get("t") ?? "");
@@ -175,7 +208,9 @@ async function handle(event: LineEvent) {
 
     // รูป / ไฟล์ / สติกเกอร์
     const c = await loadCustomer(userId, () => profileName(userId));
-    if (c.mode === "human") return;
+    c.lastText = `[${event.message?.type ?? "ไฟล์"}]`;
+    if (c.mode === "human" || (await getConfig()).aiPaused) { await saveCustomer(c); return; }
+    await saveCustomer(c);
     return reply(event.replyToken, [say("ได้รับแล้วครับ 👍 ถ้าเป็นรูปอาการเสีย ทีมจะดูให้ — พิมพ์เล่าอาการเพิ่มได้เลย หรือกด \"ติดต่อทีม\"")]);
   } catch (err) {
     console.error("LINE event failed", err);

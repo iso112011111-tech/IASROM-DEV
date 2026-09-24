@@ -17,6 +17,7 @@ export type Customer = {
   brief?: string;
   estimateSpec?: string;
   ticketId?: string;
+  lastText?: string;   // ข้อความล่าสุดของลูกค้า (แสดงในรายการลูกค้าของทีม)
   history: ChatMessage[];
   updatedAt: number;
 };
@@ -54,6 +55,60 @@ export const isAdmin = async (userId: string) => Boolean(await store.get<Admin>(
 export const addAdmin = (a: Admin) => store.set("line_admins", a.userId, a);
 export const getTicket = (id: string) => store.get<Ticket>("line_tickets", id);
 export const saveTicket = (t: Ticket) => store.set("line_tickets", t.id, t);
+
+// ---------------------------------------------------------------- สวิตช์ AI ของทีม
+
+type Config = { aiPaused: boolean; pausedBy?: string; pausedAt?: number };
+export const getConfig = async (): Promise<Config> => (await store.get<Config>("line_config", "global")) ?? { aiPaused: false };
+export const setConfig = (c: Config) => store.set("line_config", "global", c);
+
+/** ลูกค้าที่ทักมาล่าสุด (ใหม่สุดก่อน) */
+export async function recentCustomers(limit = 8) {
+  const all = await store.list<Customer>("line_customers");
+  return all.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, limit);
+}
+
+export const muteCustomer = (c: Customer, by: string) =>
+  saveCustomer(Object.assign(c, { mode: "human" as const, humanBy: by, humanUntil: Date.now() + HUMAN_HOURS * 3_600_000 }));
+export const unmuteCustomer = (c: Customer) =>
+  saveCustomer(Object.assign(c, { mode: "ai" as const, humanBy: undefined, humanUntil: undefined }));
+
+/** ปุ่มลัดของทีม (แนบท้ายทุกข้อความที่ตอบทีม) */
+export const adminQuick = () => quickReply([
+  { label: "⏸ หยุด AI ทั้งหมด", text: "/หยุด" },
+  { label: "▶️ เปิด AI", text: "/เปิด" },
+  { label: "👥 ลูกค้าล่าสุด", text: "/ลูกค้า" },
+  { label: "📊 สถานะ", text: "/สถานะ" },
+]);
+
+const ago = (t: number) => {
+  const m = Math.round((Date.now() - t) / 60_000);
+  return m < 1 ? "เมื่อสักครู่" : m < 60 ? `${m} นาทีที่แล้ว` : m < 1440 ? `${Math.round(m / 60)} ชม.ที่แล้ว` : `${Math.round(m / 1440)} วันที่แล้ว`;
+};
+
+/** รายการลูกค้าล่าสุด พร้อมปุ่มหยุด/เปิด AI ทีละคน */
+export function customerListCard(list: Customer[], globalPaused: boolean): LineMessage {
+  const rows = list.map((c) => {
+    const human = c.mode === "human";
+    return {
+      type: "box", layout: "vertical", spacing: "xs", paddingAll: "12px", cornerRadius: "12px", backgroundColor: human ? "#fff7e6" : C.bg, contents: [
+        { type: "box", layout: "horizontal", contents: [
+          text(c.name, { weight: "bold", size: "sm", flex: 1 }),
+          text(human ? `🧑 ${c.humanBy ?? "ทีม"}` : "🤖 AI", { size: "xxs", color: human ? "#b45309" : C.deep, align: "end", flex: 0 }),
+        ] },
+        text(`${c.lastText ? `"${c.lastText.slice(0, 40)}"` : "—"} · ${ago(c.updatedAt)}`, { size: "xxs", color: C.sub }),
+        human
+          ? postbackButton("🤖 คืนให้ AI", `a=unmute&u=${c.userId}`, false, `คืนให้ AI: ${c.name}`)
+          : postbackButton("🤫 หยุด AI (ทีมตอบเอง)", `a=mute&u=${c.userId}`, true, `หยุด AI: ${c.name}`),
+      ],
+    };
+  });
+  return flex("ลูกค้าล่าสุด", bubble({
+    header: header("ลูกค้าล่าสุด 👥", globalPaused ? "⏸ ตอนนี้ AI หยุดตอบทุกคนอยู่" : "กดหยุด AI ก่อนเข้าไปตอบลูกค้าเอง"),
+    body: { type: "box", layout: "vertical", spacing: "sm", paddingAll: "16px",
+      contents: rows.length ? rows : [text("ยังไม่มีลูกค้าทักมาครับ", { color: C.sub })] },
+  }), adminQuick());
+}
 
 // ---------------------------------------------------------------- prompt
 
