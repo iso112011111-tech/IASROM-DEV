@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { estimate } from "../../../data/pricing";
 import { requireAdmin } from "../../../lib/adminAuth";
 import { getConfig, listAdmins, type Customer, type Ticket } from "../../../lib/concierge";
+import { listInvoices, paymentsConfigured, paymentsTestMode, payUrl } from "../../../lib/payments";
 import { getPricing } from "../../../lib/pricingStore";
 import { store, storeKind } from "../../../lib/store";
 
@@ -12,8 +13,8 @@ export async function GET(req: Request) {
   const session = requireAdmin(req);
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const [config, admins, pricing, customers, tickets] = await Promise.all([
-    getConfig(), listAdmins(), getPricing(), store.list<Customer>("line_customers"), store.list<Ticket>("line_tickets"),
+  const [config, admins, pricing, customers, tickets, invoices] = await Promise.all([
+    getConfig(), listAdmins(), getPricing(), store.list<Customer>("line_customers"), store.list<Ticket>("line_tickets"), listInvoices(),
   ]);
   const now = Date.now();
   const withEstimate = <T extends { estimateSpec?: string }>(x: T) => {
@@ -34,10 +35,13 @@ export async function GET(req: Request) {
     pricing,
     customers: cs,
     tickets: ts,
+    payments: { configured: paymentsConfigured(), testMode: paymentsTestMode() },
+    invoices: invoices.slice(0, 100).map(({ qrUri: _q, ...i }) => ({ ...i, url: payUrl(i) })),
     stats: {
       customers: cs.length,
       today: cs.filter((c) => now - c.updatedAt < 86_400_000).length,
       openTickets: open.length,
+      paidMonth: invoices.filter((i) => i.status === "paid" && !i.testMode && now - (i.paidAt ?? 0) < 30 * 86_400_000).reduce((s, i) => s + i.amount, 0),
       humanHandled: cs.filter((c) => c.mode === "human").length,
       pipeline: ts.filter((t) => t.status !== "closed").reduce((s, t) => ({ min: s.min + (t.estimate?.min ?? 0), max: s.max + (t.estimate?.max ?? 0) }), { min: 0, max: 0 }),
     },

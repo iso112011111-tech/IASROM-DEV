@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import type { PriceItem } from "../../../data/pricing";
 import { requireAdmin } from "../../../lib/adminAuth";
-import { getTicket, HUMAN_HOURS, loadCustomer, muteCustomer, saveCustomer, saveTicket, setConfig, unmuteCustomer } from "../../../lib/concierge";
+import { type Customer, getTicket, HUMAN_HOURS, loadCustomer, muteCustomer, saveCustomer, saveTicket, setConfig, unmuteCustomer } from "../../../lib/concierge";
 import { push } from "../../../lib/line";
+import { store } from "../../../lib/store";
+import { cancelInvoice, createInvoice, getInvoice, refreshInvoice } from "../../../lib/payments";
 import { resetPricing, savePricing } from "../../../lib/pricingStore";
 
 export const preferredRegion = ["sin1"];
@@ -11,7 +13,9 @@ type Body =
   | { type: "pause" } | { type: "resume" }
   | { type: "mute" | "unmute"; userId: string }
   | { type: "accept" | "close"; ticketId: string }
-  | { type: "savePricing"; items: PriceItem[] } | { type: "resetPricing" };
+  | { type: "savePricing"; items: PriceItem[] } | { type: "resetPricing" }
+  | { type: "createInvoice"; userId: string; amount: string; description: string }
+  | { type: "cancelInvoice" | "refreshInvoice"; invoiceId: string };
 
 export async function POST(req: Request) {
   const session = requireAdmin(req, true);
@@ -49,6 +53,20 @@ export async function POST(req: Request) {
       }
       case "savePricing": await savePricing(body.items); break;
       case "resetPricing": await resetPricing(); break;
+      case "createInvoice": {
+        const userId = String(body.userId ?? "");
+        const c = /^U[0-9a-f]{32}$/.test(userId) ? await store.get<Customer>("line_customers", userId) : null;
+        if (!c) return NextResponse.json({ error: "ไม่พบลูกค้าคนนี้ (ต้องเคยทักไลน์มาก่อน)" }, { status: 404 });
+        const inv = await createInvoice({ userId: c.userId, name: c.name, amount: String(body.amount ?? ""), description: String(body.description ?? ""), createdBy: session.name });
+        return NextResponse.json({ ok: true, invoiceId: inv.id });
+      }
+      case "cancelInvoice":
+      case "refreshInvoice": {
+        const inv = await getInvoice(String(body.invoiceId ?? ""));
+        if (!inv) return NextResponse.json({ error: "ไม่พบบิลนี้" }, { status: 404 });
+        if (body.type === "cancelInvoice") await cancelInvoice(inv); else await refreshInvoice(inv, 0);
+        break;
+      }
       default: return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
     return NextResponse.json({ ok: true });

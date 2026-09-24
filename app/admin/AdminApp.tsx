@@ -13,18 +13,24 @@ type Ticket = {
   status: "open" | "accepted" | "closed"; acceptedBy?: string; createdAt: number; estimate: Est;
 };
 type PriceItem = { id: string; group: string; name: string; min: number; max: number; unit?: string; perUnit?: boolean; recurring?: string; note?: string };
+type Invoice = {
+  id: string; userId: string; name: string; amount: number; description: string; status: "pending" | "paid" | "failed" | "expired" | "canceled";
+  createdBy: string; createdAt: number; expiresAt: number; paidAt?: number; testMode: boolean; url: string;
+};
 type Data = {
   me: string; storeKind: string;
   config: { aiPaused: boolean; pausedBy?: string; pausedAt?: number };
   admins: { name: string; addedAt: number }[];
   pricing: PriceItem[]; customers: Customer[]; tickets: Ticket[];
-  stats: { customers: number; today: number; openTickets: number; humanHandled: number; pipeline: { min: number; max: number } };
+  payments: { configured: boolean; testMode: boolean }; invoices: Invoice[];
+  stats: { customers: number; today: number; openTickets: number; humanHandled: number; paidMonth: number; pipeline: { min: number; max: number } };
 };
 
 const TABS = [
   { id: "overview", label: "ภาพรวม", icon: "◎" },
   { id: "tickets", label: "เรื่องรอทีม", icon: "🎫" },
   { id: "customers", label: "ลูกค้า", icon: "👥" },
+  { id: "billing", label: "บิล / QR", icon: "🧾" },
   { id: "pricing", label: "ราคา", icon: "💰" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
@@ -36,6 +42,8 @@ const ago = (t: number) => {
   return m < 1 ? "เมื่อสักครู่" : m < 60 ? `${m} นาทีที่แล้ว` : m < 1440 ? `${Math.round(m / 60)} ชม.ที่แล้ว` : `${Math.round(m / 1440)} วันที่แล้ว`;
 };
 const cleanAi = (t: string) => t.replace(/\[\[[^\]]*\]\]/g, "").replace(/\*\*/g, "").trim();
+const satang = (n: number) => `฿${Math.floor(n / 100).toLocaleString("en-US")}.${String(n % 100).padStart(2, "0")}`;
+const PAY: Record<Invoice["status"], [string, string]> = { pending: ["รอชำระ", "warn"], paid: ["ชำระแล้ว", "ok"], failed: ["ไม่สำเร็จ", "bad"], expired: ["หมดอายุ", "muted"], canceled: ["ยกเลิก", "muted"] };
 const STATUS: Record<Ticket["status"], [string, string]> = { open: ["รอทีม", "warn"], accepted: ["ทีมรับแล้ว", "ok"], closed: ["ปิดแล้ว", "muted"] };
 const GROUPS: Record<string, string> = { web: "เว็บ / แอป / ระบบ", addon: "ฟีเจอร์เสริม", it: "งานไอที / ฮาร์ดแวร์", recurring: "ค่าบริการต่อเนื่อง" };
 
@@ -48,6 +56,7 @@ export default function AdminApp({ me }: { me: string }) {
   const [open, setOpen] = useState<Customer | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "open">("open");
+  const [billFor, setBillFor] = useState("");
 
   const load = useCallback(async () => {
     const res = await fetch("/api/admin/data", { cache: "no-store" });
@@ -126,6 +135,7 @@ export default function AdminApp({ me }: { me: string }) {
           <Stat label="ลูกค้าทั้งหมด" value={stats.customers} sub={`วันนี้ ${stats.today} คน`} />
           <Stat label="เรื่องรอทีม" value={stats.openTickets} sub="ยังไม่มีใครรับ" tone={stats.openTickets ? "warn" : undefined} onClick={() => setTab("tickets")} />
           <Stat label="ทีมกำลังดูแล" value={stats.humanHandled} sub="AI เงียบกับคนเหล่านี้" />
+          <Stat label="รับชำระแล้ว (30 วัน)" value={satang(stats.paidMonth)} sub="ผ่าน PromptPay QR" small onClick={() => setTab("billing")} />
           <Stat label="มูลค่างานประเมิน" value={stats.pipeline.max ? `${baht(stats.pipeline.min)}–${baht(stats.pipeline.max)}` : "—"} sub="เรื่องที่ยังไม่ปิด" small />
         </div>
 
@@ -200,16 +210,89 @@ export default function AdminApp({ me }: { me: string }) {
               {open.history.length ? open.history.map((m, i) => <p key={i} className={m.role === "user" ? "u" : "a"}>{m.role === "user" ? m.content : cleanAi(m.content)}</p>)
                 : <p className="adm-muted">ยังไม่มีบทสนทนากับ AI{open.lastText ? ` — ข้อความล่าสุด: "${open.lastText}"` : ""}</p>}
             </div>
-            <a className="adm-ghost" href="https://chat.line.biz/" target="_blank" rel="noopener noreferrer">เปิดแชตใน LINE OA ↗</a>
+            <div className="adm-actions">
+              <button className="adm-primary" onClick={() => { setBillFor(open.userId); setTab("billing"); }}>🧾 ออกบิล QR</button>
+              <a className="adm-ghost" href="https://chat.line.biz/" target="_blank" rel="noopener noreferrer">เปิดแชตใน LINE OA ↗</a>
+            </div>
           </> : <p className="adm-empty">เลือกลูกค้าทางซ้ายเพื่อดูรายละเอียด</p>}
         </div>
       </div>}
+
+      {tab === "billing" && <Billing data={data} busy={Boolean(busy)} preset={billFor} act={act} />}
 
       {tab === "pricing" && <PricingEditor items={data.pricing} busy={Boolean(busy)} onSave={(items) => act({ type: "savePricing", items }, "บันทึกราคาแล้ว — AI ใช้ราคาใหม่ทันที")} onReset={() => act({ type: "resetPricing" }, "คืนค่าราคาเริ่มต้นแล้ว")} />}
     </section>
 
     {toast && <div className="adm-toast" role="status">{toast}</div>}
   </main>;
+}
+
+function Billing({ data, busy, preset, act }: { data: Data; busy: boolean; preset: string; act: (b: Record<string, unknown>, done: string) => Promise<void> }) {
+  const [userId, setUserId] = useState(preset || data.customers[0]?.userId || "");
+  const [amount, setAmount] = useState("");
+  const [description, setDescription] = useState("");
+  const [confirm, setConfirm] = useState(false);
+  useEffect(() => { if (preset) setUserId(preset); }, [preset]);
+
+  // ตรวจยอดแบบเดียวกับฝั่งเซิร์ฟเวอร์ (ทศนิยมไม่เกิน 2 ตำแหน่ง, ฿20 – ฿150,000)
+  const parsed = (() => {
+    const m = amount.replace(/[,\s฿]/g, "").match(/^(\d{1,7})(?:\.(\d{1,2}))?$/);
+    if (!m) return null;
+    const v = Number(m[1]) * 100 + Number((m[2] ?? "").padEnd(2, "0"));
+    return v >= 2000 && v <= 15_000_000 ? v : null;
+  })();
+  const customer = data.customers.find((c) => c.userId === userId);
+  const ready = Boolean(parsed && customer && description.trim() && data.payments.configured);
+
+  const send = async () => {
+    await act({ type: "createInvoice", userId, amount, description }, `ส่งบิล ${satang(parsed!)} ให้ ${customer!.name} ในไลน์แล้ว`);
+    setConfirm(false); setAmount(""); setDescription("");
+  };
+
+  return <div className="adm-split">
+    <div className="adm-card adm-bill">
+      <h2>ออกบิล PromptPay QR</h2>
+      {!data.payments.configured
+        ? <div className="adm-alert">ยังไม่ได้เชื่อม Omise — ใส่ OMISE_SECRET_KEY ใน Vercel ก่อน</div>
+        : data.payments.testMode && <div className="adm-alert soft">🧪 โหมดทดสอบ — QR ยังไม่ตัดเงินจริง</div>}
+      <label>ลูกค้า
+        <select value={userId} onChange={(e) => { setUserId(e.target.value); setConfirm(false); }}>
+          {data.customers.map((c) => <option key={c.userId} value={c.userId}>{c.name}</option>)}
+        </select>
+      </label>
+      <label>ยอดเงิน (บาท)
+        <input inputMode="decimal" placeholder="เช่น 1500.50" value={amount} onChange={(e) => { setAmount(e.target.value); setConfirm(false); }} aria-invalid={Boolean(amount && !parsed)} />
+        <small className={amount && !parsed ? "bad" : ""}>{amount && !parsed ? "ใส่ตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง ยอด ฿20 – ฿150,000" : parsed ? `ลูกค้าจะเห็นยอด ${satang(parsed)}` : "ทศนิยมได้ 2 ตำแหน่ง"}</small>
+      </label>
+      <label>รายละเอียด
+        <input maxLength={120} placeholder="เช่น มัดจำงานเว็บไซต์ 50%" value={description} onChange={(e) => { setDescription(e.target.value); setConfirm(false); }} />
+      </label>
+      {!confirm
+        ? <button className="adm-primary" disabled={!ready || busy} onClick={() => setConfirm(true)}>ตรวจสอบก่อนส่ง</button>
+        : <div className="adm-confirm">
+            <p>ส่ง QR ยอด <b>{satang(parsed!)}</b><br />ให้ <b>{customer?.name}</b> · {description}</p>
+            <div><button className="adm-primary" disabled={busy} onClick={send}>✅ ยืนยันส่งเข้าไลน์</button><button className="adm-ghost" onClick={() => setConfirm(false)}>แก้ไข</button></div>
+          </div>}
+      <p className="adm-muted">QR ใช้ได้ 60 นาที ระบบยืนยันยอดให้อัตโนมัติ แล้วส่งใบเสร็จเข้าไลน์ลูกค้าและแจ้งทีม</p>
+    </div>
+    <div className="adm-card">
+      <h2>บิลล่าสุด</h2>
+      <ul className="adm-rows">
+        {data.invoices.map((i) => <li key={i.id} className="adm-inv">
+          <div className="adm-row-main"><b>{satang(i.amount)} · {i.name}</b><small>{i.description} · {i.createdBy} · {ago(i.createdAt)}{i.testMode ? " · ทดสอบ" : ""}</small></div>
+          <div className="adm-inv-side">
+            <i className={`adm-pill ${PAY[i.status][1]}`}>{PAY[i.status][0]}</i>
+            {i.status === "pending" && <>
+              <button className="adm-ghost sm" disabled={busy} onClick={() => act({ type: "refreshInvoice", invoiceId: i.id }, "เช็กสถานะแล้ว")}>เช็ก</button>
+              <button className="adm-ghost sm" disabled={busy} onClick={() => { if (window.confirm(`ยกเลิกบิล ${satang(i.amount)} ของ ${i.name}?`)) act({ type: "cancelInvoice", invoiceId: i.id }, "ยกเลิกบิลแล้ว"); }}>ยกเลิก</button>
+            </>}
+            <a className="adm-ghost sm" href={i.url} target="_blank" rel="noopener noreferrer">เปิด ↗</a>
+          </div>
+        </li>)}
+        {!data.invoices.length && <li className="adm-muted">ยังไม่มีบิล</li>}
+      </ul>
+    </div>
+  </div>;
 }
 
 function Stat({ label, value, sub, tone, small, onClick }: { label: string; value: number | string; sub: string; tone?: "warn"; small?: boolean; onClick?: () => void }) {

@@ -64,6 +64,18 @@ async function fsSet(col: string, id: string, value: unknown) {
   if (!res.ok) throw new Error(`Firestore set ${col}/${id} → ${res.status} ${(await res.text()).slice(0, 200)}`);
 }
 
+/** สร้างเอกสารเฉพาะเมื่อยังไม่มี — คืน false ถ้ามีอยู่แล้ว (ใช้กันงานซ้ำ เช่น แจ้ง "ชำระแล้ว" สองรอบ) */
+async function fsCreate(col: string, id: string, value: unknown) {
+  const res = await fetch(`${docsUrl()}/${col}/${encodeURIComponent(id)}?currentDocument.exists=false`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${await googleToken()}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: { data: { stringValue: JSON.stringify(value) }, updatedAt: { timestampValue: new Date().toISOString() } } }),
+  });
+  if (res.ok) return true;
+  if (res.status === 409 || res.status === 400 || res.status === 412) return false;
+  throw new Error(`Firestore create ${col}/${id} → ${res.status} ${(await res.text()).slice(0, 200)}`);
+}
+
 async function fsList<T>(col: string): Promise<T[]> {
   const res = await fetch(`${docsUrl()}/${col}?pageSize=100`, { headers: { Authorization: `Bearer ${await googleToken()}` } });
   if (!res.ok) throw new Error(`Firestore list ${col} → ${res.status}`);
@@ -84,6 +96,8 @@ export const store = {
     SA ? fsGet<T>(c, id) : Promise.resolve(col(c).has(id) ? JSON.parse(col(c).get(id)!) : null),
   set: (c: string, id: string, value: unknown): Promise<void> =>
     SA ? fsSet(c, id, value) : Promise.resolve(void col(c).set(id, JSON.stringify(value))),
+  create: (c: string, id: string, value: unknown): Promise<boolean> =>
+    SA ? fsCreate(c, id, value) : Promise.resolve(col(c).has(id) ? false : (col(c).set(id, JSON.stringify(value)), true)),
   list: <T>(c: string): Promise<T[]> =>
     SA ? fsList<T>(c) : Promise.resolve([...col(c).values()].map((v) => JSON.parse(v))),
   delete: (c: string, id: string): Promise<void> =>

@@ -156,3 +156,21 @@ button.adm-stat { cursor: pointer; }
   .adm-price-row label:first-child { grid-column: 1 / -1; }
   .adm-stat b { font-size: 24px; }
 }
+
+/* ---- บิล / QR */
+.adm-bill { display: grid; gap: 14px; align-content: start; }
+.adm-bill label { display: grid; gap: 6px; font-weight: 700; font-size: 13.5px; }
+.adm-bill select, .adm-bill input { height: 44px; padding: 0 12px; border: 1px solid var(--pf-line, #e3ece8); border-radius: 12px; background: transparent; color: inherit; font: 500 15px 'Noto Sans Thai', 'DM Sans', sans-serif; }
+.adm-bill input[aria-invalid="true"] { border-color: #d64545; }
+.adm-bill small { font-weight: 500; color: var(--pf-sub); }
+.adm-bill small.bad { color: #d64545; }
+.adm-confirm { padding: 14px; border-radius: 14px; background: color-mix(in srgb, #2bb98c 12%, transparent); display: grid; gap: 10px; }
+.adm-confirm p { margin: 0; line-height: 1.6; }
+.adm-confirm div, .adm-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.adm-alert.soft { background: #fff4d6; color: #7a5600; border-color: transparent; }
+.adm-inv { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 4px; border-bottom: 1px solid var(--pf-line, #e3ece8); }
+.adm-inv-side { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.adm-ghost.sm { height: 30px; padding: 0 10px; font-size: 12.5px; }
+.adm-pill.bad { background: #fde8e8; color: #9b1c1c; }
+@media (max-width: 560px) { .adm-inv { flex-direction: column; align-items: stretch; } .adm-inv-side { justify-content: flex-start; } }
+.adm-bill .adm-alert { margin: 0; justify-self: stretch; text-align: left; }
